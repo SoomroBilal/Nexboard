@@ -5,11 +5,108 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { User, Bell, Palette, Save, Building2, Globe } from "lucide-react";
-import { useState } from "react";
+import { User, Building2, Save, Check } from "lucide-react";
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 export default function SettingsPage() {
   const [tab, setTab] = useState<"profile" | "company">("profile");
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+
+  const [companyName, setCompanyName] = useState("");
+  const [companySlug, setCompanySlug] = useState("");
+  const [companyDomain, setCompanyDomain] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [profileId, setProfileId] = useState<string | null>(null);
+  const [companyId, setCompanyId] = useState<string | null>(null);
+
+  const supabase = createClient();
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      setEmail(user.email ?? "");
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id, full_name, avatar_url, company_id")
+        .eq("id", user.id)
+        .single();
+
+      if (profile) {
+        setProfileId(profile.id);
+        setFullName(profile.full_name);
+
+        if (profile.company_id) {
+          setCompanyId(profile.company_id);
+          const { data: company } = await supabase
+            .from("companies")
+            .select("name, slug, domain")
+            .eq("id", profile.company_id)
+            .single();
+
+          if (company) {
+            setCompanyName(company.name);
+            setCompanySlug(company.slug);
+            setCompanyDomain(company.domain ?? "");
+          }
+        }
+      }
+      setLoading(false);
+    };
+    fetchSettings();
+  }, []);
+
+  const handleProfileSave = async () => {
+    if (!profileId) return;
+    setSaving(true);
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ full_name: fullName })
+      .eq("id", profileId);
+
+    if (!error) {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
+    setSaving(false);
+  };
+
+  const handleCompanySave = async () => {
+    if (!companyId) return;
+    setSaving(true);
+
+    const { error } = await supabase
+      .from("companies")
+      .update({
+        name: companyName,
+        slug: companySlug,
+        domain: companyDomain || null,
+      })
+      .eq("id", companyId);
+
+    if (!error) {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
+    setSaving(false);
+  };
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-800" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -53,67 +150,23 @@ export default function SettingsPage() {
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-4">
                   <Avatar className="h-16 w-16">
-                    <AvatarFallback className="text-lg">U</AvatarFallback>
+                    <AvatarFallback className="text-lg">{fullName.charAt(0) || "U"}</AvatarFallback>
                   </Avatar>
                   <Button variant="outline" size="sm">Change Avatar</Button>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Full Name</label>
-                    <Input defaultValue="User" />
+                    <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Email</label>
-                    <Input defaultValue="user@company.com" type="email" />
+                    <Input value={email} type="email" disabled className="text-zinc-500" />
                   </div>
                 </div>
-                <Button className="gap-2"><Save className="h-4 w-4" /> Save Changes</Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Bell className="h-4 w-4" /> Notifications
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {[
-                  { label: "Email notifications", desc: "Receive updates via email" },
-                  { label: "Task reminders", desc: "Get reminded about upcoming tasks" },
-                  { label: "AI feedback alerts", desc: "When new AI feedback is available" },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium">{item.label}</p>
-                      <p className="text-xs text-zinc-500">{item.desc}</p>
-                    </div>
-                    <label className="relative inline-flex cursor-pointer items-center">
-                      <input type="checkbox" className="peer sr-only" defaultChecked />
-                      <div className="h-6 w-11 rounded-full bg-zinc-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all peer-checked:bg-purple-600 peer-checked:after:translate-x-full" />
-                    </label>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Palette className="h-4 w-4" /> Appearance
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">Dark Mode</p>
-                    <p className="text-xs text-zinc-500">Toggle dark mode on/off</p>
-                  </div>
-                  <label className="relative inline-flex cursor-pointer items-center">
-                    <input type="checkbox" className="peer sr-only" />
-                    <div className="h-6 w-11 rounded-full bg-zinc-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all peer-checked:bg-purple-600 peer-checked:after:translate-x-full" />
-                  </label>
-                </div>
+                <Button className="gap-2" onClick={handleProfileSave} disabled={saving}>
+                  {saved ? <><Check className="h-4 w-4" /> Saved</> : <><Save className="h-4 w-4" /> Save Changes</>}
+                </Button>
               </CardContent>
             </Card>
           </>
@@ -135,34 +188,23 @@ export default function SettingsPage() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Company Name</label>
-                  <Input defaultValue="My Company" />
+                  <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Company Slug</label>
                   <div className="flex items-center gap-1 text-sm text-zinc-500">
                     <span>nexboard.io/</span>
-                    <Input defaultValue="my-company" className="flex-1" />
+                    <Input value={companySlug} onChange={(e) => setCompanySlug(e.target.value)} className="flex-1" />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Domain</label>
-                  <Input defaultValue="company.com" placeholder="your-domain.com" />
+                  <Input value={companyDomain} onChange={(e) => setCompanyDomain(e.target.value)} placeholder="your-domain.com" />
                 </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Company Size</label>
-                <select className="flex h-9 w-full rounded-md border border-zinc-200 bg-transparent px-3 py-1 text-sm shadow-sm dark:border-zinc-800">
-                  <option>1-10 employees</option>
-                  <option>11-50 employees</option>
-                  <option>51-200 employees</option>
-                  <option>201-1000 employees</option>
-                  <option>1000+ employees</option>
-                </select>
-              </div>
-              <div className="border-t border-zinc-200 pt-4 dark:border-zinc-800">
-                <h4 className="text-sm font-medium text-red-600 mb-2">Danger Zone</h4>
-                <Button variant="destructive" size="sm">Delete Company</Button>
-              </div>
+              <Button className="gap-2" onClick={handleCompanySave} disabled={saving}>
+                {saved ? <><Check className="h-4 w-4" /> Saved</> : <><Save className="h-4 w-4" /> Save Changes</>}
+              </Button>
             </CardContent>
           </Card>
         )}

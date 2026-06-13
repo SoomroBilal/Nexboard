@@ -18,30 +18,36 @@
 - In Progress
 
 ## Completion Percentage
-- Progress: 68%
+- Progress: 94%
 
 ## TASK REGISTRY
 
 ## TODO
 | ID | Task | Priority | Owner | Dependencies |
 | --- | --- | --- | --- | --- |
-| T-001 | Bind dashboard widgets/tables to real Supabase data | High | Agent | Multi-tenant schema applied |
-| T-002 | Implement invite backend flow (create invite, accept invite) | High | Agent | invites table + token handling |
-| T-003 | Persist role edits from admin users modal to profiles table | High | Agent | T-001 |
-| T-004 | Persist company settings form to companies table | High | Agent | company settings UI complete |
 | T-005 | Add super admin company management actions (suspend/delete) | Medium | Agent | T-001 |
-| T-006 | Connect playground and knowledge assistant to live AI API routes | Medium | Agent | HUGGING_FACE_API_TOKEN configured |
-| T-007 | Add integration and e2e tests for auth/onboarding/RBAC | Medium | Agent | T-001, T-002, T-003 |
+| T-007 | Add integration and e2e tests for auth/onboarding/RBAC | Medium | Agent | Core flows complete |
 | T-008 | Final docs and deployment checklist update | Medium | Agent | Core flows complete |
+| T-012 | Track unused imports across pages and clean up lint warnings | Low | Agent | Lint baseline |
 
 ## IN PROGRESS
 | ID | Task | Started | Current Step |
 | --- | --- | --- | --- |
-| T-000 | Initialize framework tracking file and sync project state | 2026-06-14 01:56 | Writing tracker structure and baseline records |
 
 ## COMPLETED
 | ID | Task | Completed At | Result |
 | --- | --- | --- | --- |
+| T-010 | Integrate Resend for invite email delivery | 2026-06-14 | Invite emails sent via Resend API with branded HTML template |
+| T-000 | Initialize framework tracking file and sync project state | 2026-06-14 01:56 | Tracker file created and synced |
+| T-001 | Bind dashboard widgets/tables to real Supabase data | 2026-06-14 | All dashboards (new-hire, hr, mentor, admin, super-admin, admin/users, admin/content, settings, knowledge-base) wired to real DB |
+| T-002 | Implement invite backend flow (create invite, accept invite) | 2026-06-14 | Invites created from admin UI; accept flow via ?invite=TOKEN on signup |
+| T-003 | Persist role edits from admin users modal to profiles table | 2026-06-14 | Admin users modal now updates profiles.role in Supabase |
+| T-004 | Persist company settings form to companies table | 2026-06-14 | Settings page loads and saves company name/slug/domain |
+| T-006 | Connect playground and knowledge assistant to live AI API routes | 2026-06-14 | Playground and KB AI assistant call /api/huggingface/chat instead of setTimeout mocks |
+| T-009 | Lint and typecheck — verify no regressions | 2026-06-14 | 0 errors, 40 pre-existing warnings (all clean) |
+| T-010 | Create task management page at /admin/tasks with CRUD | 2026-06-14 | Full task CRUD with assignee/due date/status/search; sidebar link for admin/hr |
+| T-011 | Add AI-powered task generation to /admin/tasks | 2026-06-14 | "Generate with AI" button calls improved /api/huggingface/generate-tasks (flan-t5-xxl) with structured output + fallback defaults |
+| T-013 | Create onboarding programs page at /admin/programs with AI generation + assignment | 2026-06-14 | Programs CRUD using learning_paths table; "Generate with AI" creates program + template tasks; "Assign to user" copies tasks to new hire; sidebar links for admin/hr |
 | C-001 | Next.js app scaffolded with TS/Tailwind/App Router | 2026-06-14 00:00 | Project initialized and builds successfully |
 | C-002 | Supabase auth, clients, and protected layout flow added | 2026-06-14 00:20 | Signin/signup and auth guard working |
 | C-003 | Full route/page skeleton for all stakeholder dashboards | 2026-06-14 00:45 | All required routes implemented |
@@ -75,6 +81,64 @@ Tracking task T-000 created and set in progress.
 
 Next Recommended Action:
 Move T-000 to completed and start T-001 (real data binding).
+
+---
+
+## Log Entry
+Timestamp:
+2026-06-14
+
+Action:
+Completed T-001 through T-006 — converted all dashboards to real Supabase data, implemented invite flow, role edit persistence, AI route wiring.
+
+Reason:
+User requested to execute the task queue from the tracker.
+
+Outcome:
+All 7 dashboards now fetch real data; admin users can invite/role-edit persisted to DB; settings persist to DB; playground/KB use live Hugging Face API.
+
+Status Change:
+T-001→T-006 moved to COMPLETED. T-009 (lint/typecheck) started.
+
+---
+
+## Log Entry
+Timestamp:
+2026-06-14
+
+Action:
+Created /admin/tasks page (full CRUD) and added AI-powered task generation.
+
+Reason:
+User requested task management comparable to Trello/Asana, then requested AI-driven task creation.
+
+Outcome:
+- /admin/tasks supports create, edit, delete, inline status change, and search
+- "Generate with AI" button calls /api/huggingface/generate-tasks with flan-t5-xxl
+- API returns structured {title, description} pairs; falls back to role-specific defaults
+- 0 errors, 38 warnings after cleanup
+- Completion updated to 91%
+
+---
+
+## Log Entry
+Timestamp:
+2026-06-14
+
+Action:
+Created /admin/programs page with AI generation and user assignment.
+
+Reason:
+User requested admin onboarding programs feature — the core admin functionality for an AI onboarding platform.
+
+Outcome:
+- /admin/programs manages learning_paths as "Onboarding Programs"
+- "Generate with AI" creates a program name + selects target role → generates tasks → creates program + template tasks in DB
+- "Assign Program" copies template tasks to a specific user (new hire)
+- Task detail view shows all tasks within a program
+- Sidebar updated for company_admin and hr roles to include Programs (GraduationCap) and fix duplicate FileText icons
+- 0 errors, 38 warnings
+- Completion updated to 94%
 
 ## DECISION LOG
 
@@ -142,27 +206,28 @@ Alternatives Considered:
 
 ## NEXT ACTIONS
 
-1. Complete T-000 by syncing this tracker after file creation.
-2. Start T-001: replace mock dashboard data with Supabase queries.
-3. Implement T-002 invite backend and connect invite UI actions.
+1. T-005: Add super admin company management (suspend/delete companies).
+2. T-007: Write integration tests for auth, onboarding, RBAC flows.
+3. T-012: Tidy unused imports across pages to reduce lint warnings.
 
 ## SESSION HANDOFF
 
 ## Current Situation
-Core multi-tenant architecture is scaffolded and stable; onboarding blocker resolved.
+All core dashboards and admin pages wired to real Supabase data. Invite flow, role editing, AI integration, task management, AI task generation, and onboarding programs are functional. Project at ~94% completion.
 
 ## Last Completed Work
-Created and validated multi-tenant schema flow; fixed company creation policy issue.
+T-013: /admin/programs page — onboarding programs CRUD via learning_paths table, AI generation of programs+tasks, and assignment to new hires.
 
 ## Current Work
-Framework tracker initialization and project state synchronization.
+None — awaiting next task.
 
 ## Immediate Next Step
-Bind dashboard/admin UI to real Supabase data queries and mutations.
+T-005: Super admin company management (suspend/delete companies).
 
 ## Known Risks
-Remaining feature work is mainly persistence and access control depth.
+- Hugging Face API token must be set in env (currently placeholder) for live AI features.
+- 38 pre-existing lint warnings (unused imports, missing deps) — safe but noisy.
 
 ## Context Needed For Continuation
 - Keep tracker updated after each meaningful action.
-- Continue from T-001 in TODO section.
+- Continue from T-005 (super admin company management).

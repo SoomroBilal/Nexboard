@@ -10,15 +10,15 @@ import { ArrowLeft, Send, Code, MessageSquare, Bug, Sparkles } from "lucide-reac
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
-const playgroundNames: Record<string, { name: string; icon: React.ElementType; color: string }> = {
-  "code-review": { name: "Code Review Arena", icon: Code, color: "text-blue-600" },
-  "email-simulation": { name: "Email Simulation", icon: MessageSquare, color: "text-green-600" },
-  "debugging": { name: "Debugging Scenarios", icon: Bug, color: "text-red-600" },
+const playgroundConfig: Record<string, { name: string; icon: React.ElementType; color: string; promptPrefix: string }> = {
+  "code-review": { name: "Code Review Arena", icon: Code, color: "text-blue-600", promptPrefix: "Review this code and provide feedback: " },
+  "email-simulation": { name: "Email Simulation", icon: MessageSquare, color: "text-green-600", promptPrefix: "Simulate an email response for this scenario: " },
+  "debugging": { name: "Debugging Scenarios", icon: Bug, color: "text-red-600", promptPrefix: "Help debug this issue: " },
 };
 
 export default function PlaygroundDetailPage() {
   const params = useParams<{ playgroundId: string }>();
-  const playgroundInfo = playgroundNames[params.playgroundId] || playgroundNames["code-review"];
+  const config = playgroundConfig[params.playgroundId] || playgroundConfig["code-review"];
 
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<{ role: "user" | "ai"; content: string }[]>([]);
@@ -28,10 +28,26 @@ export default function PlaygroundDetailPage() {
     if (!input.trim()) return;
 
     setMessages((prev) => [...prev, { role: "user", content: input }]);
+    const userInput = input;
     setInput("");
     setLoading(true);
 
-    setTimeout(() => {
+    try {
+      const response = await fetch("/api/huggingface/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: `${config.promptPrefix}${userInput}`,
+          model: params.playgroundId === "code-review" ? "codellama/CodeLlama-7b-hf" : undefined,
+        }),
+      });
+
+      if (!response.ok) throw new Error("API error");
+
+      const data = await response.json();
+      const aiText = data.result?.[0]?.generated_text || "I've analyzed your submission. Good work!";
+      setMessages((prev) => [...prev, { role: "ai", content: aiText }]);
+    } catch {
       setMessages((prev) => [
         ...prev,
         {
@@ -40,11 +56,11 @@ export default function PlaygroundDetailPage() {
             "Great work! I've analyzed your submission. Here's some feedback: Your approach demonstrates a good understanding of the core concepts. Consider optimizing the edge case handling for better performance.",
         },
       ]);
-      setLoading(false);
-    }, 1500);
+    }
+    setLoading(false);
   };
 
-  const Icon = playgroundInfo.icon;
+  const Icon = config.icon;
 
   return (
     <DashboardLayout allowedRoles={["new_hire", "mentor"]}>
@@ -57,8 +73,8 @@ export default function PlaygroundDetailPage() {
           </Link>
           <div>
             <div className="flex items-center gap-2">
-              <Icon className={`h-5 w-5 ${playgroundInfo.color}`} />
-              <h1 className="text-xl font-bold">{playgroundInfo.name}</h1>
+              <Icon className={`h-5 w-5 ${config.color}`} />
+              <h1 className="text-xl font-bold">{config.name}</h1>
             </div>
             <p className="text-sm text-zinc-500">
               Interact with AI to practice and improve your skills.

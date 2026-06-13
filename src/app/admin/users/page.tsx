@@ -6,25 +6,224 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
-import { Search, Plus, MoreHorizontal, Mail, UserPlus, Shield, Pencil } from "lucide-react";
-import { useState } from "react";
+import { Search, MoreHorizontal, Mail, UserPlus, Shield, Pencil, Link, Copy, Check } from "lucide-react";
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import type { Profile, Invite, UserRole } from "@/lib/types";
 
 const roleOptions = [
-  { value: "company_admin", label: "Company Admin", desc: "Full access to manage company and users" },
-  { value: "hr", label: "HR / L&D", desc: "Manage programs, reports, and new hires" },
-  { value: "mentor", label: "Mentor", desc: "Assign tasks and review mentee progress" },
-  { value: "new_hire", label: "New Hire", desc: "Access learning paths and playgrounds" },
-  { value: "leadership", label: "Leadership", desc: "View executive dashboards and reports" },
-  { value: "it_security", label: "IT / Security", desc: "Monitor security and integrations" },
+  { value: "company_admin" as UserRole, label: "Company Admin", desc: "Full access to manage company and users" },
+  { value: "hr" as UserRole, label: "HR / L&D", desc: "Manage programs, reports, and new hires" },
+  { value: "mentor" as UserRole, label: "Mentor", desc: "Assign tasks and review mentee progress" },
+  { value: "new_hire" as UserRole, label: "New Hire", desc: "Access learning paths and playgrounds" },
+  { value: "leadership" as UserRole, label: "Leadership", desc: "View executive dashboards and reports" },
+  { value: "it_security" as UserRole, label: "IT / Security", desc: "Monitor security and integrations" },
 ];
+
+function getInviteLink(token: string) {
+  const base = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+  return `${base}/auth/signup?invite=${token}`;
+}
 
 export default function AdminUsersPage() {
   const [tab, setTab] = useState<"users" | "invites">("users");
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [editUser, setEditUser] = useState<string | null>(null);
+  const [editUserId, setEditUserId] = useState<string | null>(null);
+  const [editUserName, setEditUserName] = useState("");
+  const [editRole, setEditRole] = useState<UserRole>("new_hire");
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("new_hire");
+  const [inviteRole, setInviteRole] = useState<UserRole>("new_hire");
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [invites, setInvites] = useState<Invite[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteStep, setInviteStep] = useState<"form" | "done">("form");
+  const [lastInviteToken, setLastInviteToken] = useState<string | null>(null);
+  const [lastInviteEmail, setLastInviteEmail] = useState("");
+  const [copiedIndex, setCopiedIndex] = useState<string | null>(null);
+
+  useEffect(() => {
+    const supabase = createClient();
+
+    const fetchData = async () => {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("id", user.id)
+        .single();
+
+      if (!profile?.company_id) return;
+
+      const { data: profilesData } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("company_id", profile.company_id)
+        .order("created_at", { ascending: false });
+
+      if (profilesData) setProfiles(profilesData);
+
+      const { data: invitesData } = await supabase
+        .from("invites")
+        .select("*")
+        .eq("company_id", profile.company_id)
+        .order("created_at", { ascending: false });
+
+      if (invitesData) setInvites(invitesData as Invite[]);
+      setLoading(false);
+    };
+
+    fetchData();
+  }, []);
+
+  const refreshData = async () => {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.company_id) return;
+
+    const { data: profilesData } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("company_id", profile.company_id)
+      .order("created_at", { ascending: false });
+
+    if (profilesData) setProfiles(profilesData);
+
+    const { data: invitesData } = await supabase
+      .from("invites")
+      .select("*")
+      .eq("company_id", profile.company_id)
+      .order("created_at", { ascending: false });
+
+    if (invitesData) setInvites(invitesData as Invite[]);
+  };
+
+  const handleInvite = async (sendEmail = true) => {
+    if (!inviteEmail.trim()) return;
+    setInviteLoading(true);
+    setError(null);
+
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.company_id) return;
+
+    const token = crypto.randomUUID();
+
+    const { error: inviteError } = await supabase.from("invites").insert({
+      company_id: profile.company_id,
+      email: inviteEmail,
+      role: inviteRole,
+      invited_by_user_id: user.id,
+      token,
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    });
+
+    if (inviteError) {
+      setError(inviteError.message);
+      setInviteLoading(false);
+      return;
+    }
+
+    if (sendEmail) {
+      const res = await fetch("/api/invites/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        setError(`Invite created but email failed: ${err.error}`);
+      }
+    }
+
+    setLastInviteToken(token);
+    setLastInviteEmail(inviteEmail);
+    setInviteStep("done");
+    setInviteLoading(false);
+    await refreshData();
+  };
+
+  const handleSendEmail = async () => {
+    if (!lastInviteToken) return;
+    setInviteLoading(true);
+    setError(null);
+
+    const res = await fetch("/api/invites/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: lastInviteToken }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      setError(`Email failed: ${err.error}`);
+    }
+    setInviteLoading(false);
+  };
+
+  const handleRoleUpdate = async () => {
+    if (!editUserId) return;
+    setError(null);
+
+    const supabase = createClient();
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({ role: editRole })
+      .eq("id", editUserId);
+
+    if (updateError) {
+      setError(updateError.message);
+    } else {
+      setEditOpen(false);
+      setEditUserId(null);
+      await refreshData();
+    }
+  };
+
+  const copyToClipboard = async (token: string, id: string) => {
+    const link = getInviteLink(token);
+    await navigator.clipboard.writeText(link);
+    setCopiedIndex(id);
+    setTimeout(() => setCopiedIndex(null), 2000);
+  };
+
+  const resetInviteModal = () => {
+    setInviteStep("form");
+    setInviteEmail("");
+    setInviteRole("new_hire");
+    setError(null);
+    setLastInviteToken(null);
+    setInviteOpen(false);
+  };
+
+  const filteredProfiles = profiles.filter(
+    (p) =>
+      p.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.email?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <DashboardLayout allowedRoles={["company_admin", "super_admin"]}>
@@ -34,12 +233,11 @@ export default function AdminUsersPage() {
             <h1 className="text-2xl font-bold">User Management</h1>
             <p className="text-zinc-500">Manage your team members and invite new users.</p>
           </div>
-          <Button className="gap-2" onClick={() => setInviteOpen(true)}>
+          <Button className="gap-2" onClick={() => { setInviteStep("form"); setInviteOpen(true); }}>
             <UserPlus className="h-4 w-4" /> Invite User
           </Button>
         </div>
 
-        {/* Role legend */}
         <div className="flex flex-wrap gap-2">
           {roleOptions.map((r) => (
             <Badge key={r.value} variant="secondary" className="text-xs">
@@ -59,47 +257,64 @@ export default function AdminUsersPage() {
           <>
             <div className="relative max-w-sm">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-              <Input placeholder="Search users..." className="pl-9" />
+              <Input placeholder="Search users..." className="pl-9" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             </div>
 
             <Card>
               <CardContent className="p-0">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                      <th className="px-4 py-3 text-left text-sm font-medium text-zinc-500">Name</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-zinc-500">Email</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-zinc-500">Role</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-zinc-500">Status</th>
-                      <th className="px-4 py-3 text-right text-sm font-medium text-zinc-500">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[
-                      { name: "Alice Chen", email: "alice@company.com", role: "New Hire", roleVal: "new_hire", status: "Active" as const },
-                      { name: "Bob Martinez", email: "bob@company.com", role: "Mentor", roleVal: "mentor", status: "Active" as const },
-                      { name: "Carol Smith", email: "carol@company.com", role: "HR", roleVal: "hr", status: "Active" as const },
-                      { name: "David Lee", email: "david@company.com", role: "Company Admin", roleVal: "company_admin", status: "Active" as const },
-                    ].map((user) => (
-                      <tr key={user.email} className="border-b border-zinc-100 dark:border-zinc-800">
-                        <td className="px-4 py-3 text-sm font-medium">{user.name}</td>
-                        <td className="px-4 py-3 text-sm text-zinc-500">{user.email}</td>
-                        <td className="px-4 py-3"><Badge variant="secondary">{user.role}</Badge></td>
-                        <td className="px-4 py-3"><Badge variant={user.status === "Active" ? "success" : "secondary"}>{user.status}</Badge></td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => { setEditUser(user.name); setEditOpen(true); }} title="Edit role">
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" title="More">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </td>
+                {loading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-800" />
+                  </div>
+                ) : (
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-zinc-200 dark:border-zinc-800">
+                        <th className="px-4 py-3 text-left text-sm font-medium text-zinc-500">Name</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-zinc-500">Email</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-zinc-500">Role</th>
+                        <th className="px-4 py-3 text-right text-sm font-medium text-zinc-500">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {filteredProfiles.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="px-4 py-12 text-center text-sm text-zinc-400">No users found.</td>
+                        </tr>
+                      ) : (
+                        filteredProfiles.map((p) => (
+                          <tr key={p.id} className="border-b border-zinc-100 dark:border-zinc-800">
+                            <td className="px-4 py-3 text-sm font-medium">{p.full_name}</td>
+                            <td className="px-4 py-3 text-sm text-zinc-500">{p.email}</td>
+                            <td className="px-4 py-3">
+                              <Badge variant="secondary">{roleOptions.find(r => r.value === p.role)?.label ?? p.role}</Badge>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    setEditUserId(p.id);
+                                    setEditUserName(p.full_name);
+                                    setEditRole(p.role);
+                                    setEditOpen(true);
+                                  }}
+                                  title="Edit role"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" title="More">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                )}
               </CardContent>
             </Card>
           </>
@@ -109,54 +324,128 @@ export default function AdminUsersPage() {
               <CardTitle>Pending Invites</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-8 text-zinc-400">
-                <Mail className="mx-auto h-8 w-8 mb-2" />
-                <p className="text-sm">No pending invites. Click &quot;Invite User&quot; to invite team members.</p>
-              </div>
+              {invites.length === 0 ? (
+                <div className="text-center py-8 text-zinc-400">
+                  <Mail className="mx-auto h-8 w-8 mb-2" />
+                  <p className="text-sm">No pending invites. Click &quot;Invite User&quot; to invite team members.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {invites.map((inv) => {
+                    const link = getInviteLink(inv.token);
+                    return (
+                      <div key={inv.id} className="flex items-center justify-between rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate">{inv.email}</p>
+                          <p className="text-xs text-zinc-500">
+                            {roleOptions.find(r => r.value === inv.role)?.label ?? inv.role} &middot; Expires {new Date(inv.expires_at).toLocaleDateString()}
+                          </p>
+                          <div className="flex items-center gap-1 mt-1">
+                            <Link className="h-3 w-3 text-zinc-400" />
+                            <span className="text-xs text-zinc-400 truncate max-w-[280px]">{link}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 ml-3">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="gap-1 text-xs"
+                            onClick={() => copyToClipboard(inv.token, inv.id)}
+                          >
+                            {copiedIndex === inv.id ? <><Check className="h-3 w-3" /> Copied</> : <><Copy className="h-3 w-3" /> Copy Link</>}
+                          </Button>
+                          <Badge variant={inv.accepted ? "success" : "warning"}>
+                            {inv.accepted ? "Accepted" : "Pending"}
+                          </Badge>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
       </div>
 
-      {/* Invite Modal */}
-      <Modal open={inviteOpen} onClose={() => setInviteOpen(false)} title="Invite Team Member">
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Email Address</label>
-            <Input placeholder="colleague@company.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Role</label>
+      <Modal open={inviteOpen} onClose={resetInviteModal} title={inviteStep === "form" ? "Invite Team Member" : "Invite Created"}>
+        {inviteStep === "form" ? (
+          <div className="space-y-4">
             <div className="space-y-2">
-              {roleOptions.map((r) => (
-                <label key={r.value} className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${inviteRole === r.value ? "border-purple-500 bg-purple-50 dark:bg-purple-950" : "border-zinc-200 dark:border-zinc-800"}`}>
-                  <input type="radio" name="inviteRole" value={r.value} checked={inviteRole === r.value} onChange={(e) => setInviteRole(e.target.value)} className="mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">{r.label}</p>
-                    <p className="text-xs text-zinc-500">{r.desc}</p>
-                  </div>
-                </label>
-              ))}
+              <label className="text-sm font-medium">Email Address</label>
+              <Input placeholder="colleague@company.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Role</label>
+              <div className="space-y-2">
+                {roleOptions.map((r) => (
+                  <label key={r.value} className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${inviteRole === r.value ? "border-purple-500 bg-purple-50 dark:bg-purple-950" : "border-zinc-200 dark:border-zinc-800"}`}>
+                    <input type="radio" name="inviteRole" value={r.value} checked={inviteRole === r.value} onChange={(e) => setInviteRole(e.target.value as UserRole)} className="mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium">{r.label}</p>
+                      <p className="text-xs text-zinc-500">{r.desc}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+            {error && <p className="text-sm text-red-500">{error}</p>}
+            <div className="flex gap-2 pt-2">
+              <Button variant="outline" className="flex-1" onClick={resetInviteModal}>Cancel</Button>
+              <Button className="flex-1 gap-2" onClick={() => handleInvite(true)} disabled={inviteLoading || !inviteEmail.trim()}>
+                {inviteLoading ? "Sending..." : <><Mail className="h-4 w-4" /> Send Invite</>}
+              </Button>
+            </div>
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => handleInvite(false)}
+                disabled={inviteLoading || !inviteEmail.trim()}
+                className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 underline"
+              >
+                Create invite link instead (no email)
+              </button>
             </div>
           </div>
-          <div className="flex gap-2 pt-2">
-            <Button variant="outline" className="flex-1" onClick={() => setInviteOpen(false)}>Cancel</Button>
-            <Button className="flex-1 gap-2" onClick={() => { setInviteOpen(false); setTab("invites"); }}>
-              <Mail className="h-4 w-4" /> Send Invite
+        ) : (
+          <div className="space-y-4">
+            <div className="rounded-lg bg-green-50 dark:bg-green-950 p-4 text-center">
+              <Check className="mx-auto h-8 w-8 text-green-600 mb-2" />
+              <p className="font-medium text-green-800 dark:text-green-200">Invite created for {lastInviteEmail}</p>
+            </div>
+            {error && <p className="text-sm text-red-500">{error}</p>}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Invitation Link</label>
+              <div className="flex gap-2">
+                <Input value={lastInviteToken ? getInviteLink(lastInviteToken) : ""} readOnly className="flex-1 text-xs" />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 shrink-0"
+                  onClick={() => lastInviteToken && copyToClipboard(lastInviteToken, "modal")}
+                >
+                  {copiedIndex === "modal" ? <><Check className="h-3 w-3" /> Copied</> : <><Copy className="h-3 w-3" /> Copy</>}
+                </Button>
+              </div>
+            </div>
+            <Button className="w-full gap-2" onClick={handleSendEmail} disabled={inviteLoading}>
+              {inviteLoading ? "Sending..." : <><Mail className="h-4 w-4" /> Send Email</>}
+            </Button>
+            <Button variant="outline" className="w-full" onClick={resetInviteModal}>
+              Done
             </Button>
           </div>
-        </div>
+        )}
       </Modal>
 
-      {/* Edit Role Modal */}
-      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={`Change Role — ${editUser}`}>
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={`Change Role — ${editUserName}`}>
         <div className="space-y-4">
           <div className="space-y-2">
             <label className="text-sm font-medium">Select new role</label>
             <div className="space-y-2">
               {roleOptions.map((r) => (
-                <label key={r.value} className="flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-200 p-3 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900">
-                  <input type="radio" name="editRole" value={r.value} className="mt-0.5" />
+                <label key={r.value} className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${editRole === r.value ? "border-purple-500 bg-purple-50 dark:bg-purple-950" : "border-zinc-200 dark:border-zinc-800"}`}>
+                  <input type="radio" name="editRole" value={r.value} checked={editRole === r.value} onChange={(e) => setEditRole(e.target.value as UserRole)} className="mt-0.5" />
                   <div>
                     <p className="text-sm font-medium">{r.label}</p>
                     <p className="text-xs text-zinc-500">{r.desc}</p>
@@ -165,9 +454,12 @@ export default function AdminUsersPage() {
               ))}
             </div>
           </div>
+          {error && <p className="text-sm text-red-500">{error}</p>}
           <div className="flex gap-2 pt-2">
             <Button variant="outline" className="flex-1" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button className="flex-1 gap-2"><Shield className="h-4 w-4" /> Update Role</Button>
+            <Button className="flex-1 gap-2" onClick={handleRoleUpdate}>
+              <Shield className="h-4 w-4" /> Update Role
+            </Button>
           </div>
         </div>
       </Modal>

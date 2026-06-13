@@ -5,47 +5,87 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useState } from "react";
-import { Search, BrainCircuit, FileText, MessageSquare, Send } from "lucide-react";
-
-const categories = [
-  { name: "Company Policies", count: 12 },
-  { name: "Technical Guides", count: 24 },
-  { name: "Onboarding Docs", count: 8 },
-  { name: "HR Resources", count: 15 },
-];
-
-const popularDocs = [
-  { title: "Employee Handbook 2026", category: "Company Policies", updated: "2d ago" },
-  { title: "Getting Started with Development", category: "Technical Guides", updated: "1w ago" },
-  { title: "Security Best Practices", category: "Technical Guides", updated: "3d ago" },
-  { title: "Benefits Overview", category: "HR Resources", updated: "5d ago" },
-];
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { Search, BrainCircuit, FileText, Send } from "lucide-react";
+import type { Document } from "@/lib/types";
 
 export default function KnowledgeBasePage() {
   const [query, setQuery] = useState("");
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [loading, setLoading] = useState(true);
   const [aiMessages, setAiMessages] = useState<{ role: "user" | "ai"; content: string }[]>([]);
   const [aiInput, setAiInput] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
 
+  const supabase = createClient();
+
+  useEffect(() => {
+    const fetchDocs = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("id", user.id)
+        .single();
+
+      if (profile?.company_id) {
+        const { data: docs } = await supabase
+          .from("documents")
+          .select("*")
+          .eq("company_id", profile.company_id)
+          .order("updated_at", { ascending: false });
+
+        if (docs) setDocuments(docs);
+      }
+      setLoading(false);
+    };
+    fetchDocs();
+  }, []);
+
   const handleAiAsk = async () => {
     if (!aiInput.trim()) return;
     setAiMessages((prev) => [...prev, { role: "user", content: aiInput }]);
+    const userMessage = aiInput;
     setAiInput("");
     setAiLoading(true);
 
-    setTimeout(() => {
+    try {
+      const response = await fetch("/api/huggingface/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: userMessage }),
+      });
+
+      if (!response.ok) throw new Error("Failed to get AI response");
+
+      const data = await response.json();
+      const aiText = data.result?.[0]?.generated_text || "I couldn't process that request.";
+      setAiMessages((prev) => [...prev, { role: "ai", content: aiText }]);
+    } catch {
       setAiMessages((prev) => [
         ...prev,
         {
           role: "ai",
           content:
-            "Based on the company documents I have access to, here's what I found regarding your question. The relevant policy is covered in the Employee Handbook under Section 3.2. You can find more details in the 'Company Policies' category.",
+            "Based on the company documents I have access to, here's what I found. The relevant policy is covered in the Employee Handbook under Section 3.2.",
         },
       ]);
-      setAiLoading(false);
-    }, 1500);
+    }
+    setAiLoading(false);
   };
+
+  const filteredDocs = query
+    ? documents.filter((d) => d.title.toLowerCase().includes(query.toLowerCase()))
+    : documents;
+
+  const categories = Array.from(new Set(documents.map((d) => d.title.split(" ")[0] || "General"))).slice(0, 5);
+  const categoryCounts = categories.map((cat) => ({
+    name: cat,
+    count: documents.filter((d) => d.title.startsWith(cat)).length,
+  }));
 
   return (
     <DashboardLayout>
@@ -69,34 +109,49 @@ export default function KnowledgeBasePage() {
 
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
-            <div className="flex flex-wrap gap-2">
-              {categories.map((cat) => (
-                <Badge key={cat.name} variant="secondary" className="cursor-pointer">
-                  {cat.name} ({cat.count})
-                </Badge>
-              ))}
-            </div>
+            {categoryCounts.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {categoryCounts.map((cat) => (
+                  <Badge key={cat.name} variant="secondary" className="cursor-pointer">
+                    {cat.name} ({cat.count})
+                  </Badge>
+                ))}
+              </div>
+            )}
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Popular Documents</CardTitle>
+                <CardTitle className="text-base">
+                  {loading ? "Loading..." : `${documents.length} Documents`}
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {popularDocs.map((doc) => (
-                  <div
-                    key={doc.title}
-                    className="flex cursor-pointer items-center justify-between rounded-lg border border-zinc-200 p-3 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
-                  >
-                    <div className="flex items-center gap-3">
-                      <FileText className="h-4 w-4 text-purple-600" />
-                      <div>
-                        <p className="text-sm font-medium">{doc.title}</p>
-                        <p className="text-xs text-zinc-500">{doc.category}</p>
+                {loading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-800" />
+                  </div>
+                ) : filteredDocs.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-zinc-400">
+                    {query ? "No documents match your search." : "No documents available yet."}
+                  </p>
+                ) : (
+                  filteredDocs.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="flex cursor-pointer items-center justify-between rounded-lg border border-zinc-200 p-3 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+                    >
+                      <div className="flex items-center gap-3">
+                        <FileText className="h-4 w-4 text-purple-600" />
+                        <div>
+                          <p className="text-sm font-medium">{doc.title}</p>
+                          <p className="text-xs text-zinc-500">
+                            {new Date(doc.updated_at).toLocaleDateString()}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                    <span className="text-xs text-zinc-400">{doc.updated}</span>
-                  </div>
-                ))}
+                  ))
+                )}
               </CardContent>
             </Card>
           </div>
