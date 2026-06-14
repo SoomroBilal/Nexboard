@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { buildRateLimitKey, checkRateLimit } from "@/lib/rate-limit";
+import { InferenceClient } from "@huggingface/inference";
+import { HUGGING_FACE_MODELS, HUGGING_FACE_TOKEN } from "@/lib/constants";
 
 export async function POST(request: Request) {
   try {
@@ -26,7 +28,7 @@ export async function POST(request: Request) {
 
     const prompt = `Review the following ${language || "code"} for bugs, security issues, and best practices. Provide specific feedback and suggestions for improvement:\n\n${code}`;
 
-    const apiToken = process.env.HUGGING_FACE_API_TOKEN;
+    const apiToken = HUGGING_FACE_TOKEN;
     if (!apiToken) {
       return NextResponse.json(
         { error: "Hugging Face API token not configured" },
@@ -34,30 +36,22 @@ export async function POST(request: Request) {
       );
     }
 
-    const response = await fetch(
-      "https://api-inference.huggingface.co/models/codellama/CodeLlama-7b-hf",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiToken}`,
-          "Content-Type": "application/json",
+    const client = new InferenceClient(apiToken);
+    const completion = await client.chatCompletion({
+      model: HUGGING_FACE_MODELS.CHAT,
+      messages: [
+        {
+          role: "system",
+          content: "You are a senior software engineer giving concise code review feedback.",
         },
-        body: JSON.stringify({
-          inputs: prompt,
-          parameters: { max_new_tokens: 500, temperature: 0.2 },
-        }),
-      }
-    );
+        { role: "user", content: prompt },
+      ],
+      max_tokens: 500,
+      temperature: 0.2,
+    });
 
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: "Hugging Face API error" },
-        { status: response.status }
-      );
-    }
-
-    const result = await response.json();
-    return NextResponse.json({ review: result });
+    const generatedText = completion.choices?.[0]?.message?.content ?? "";
+    return NextResponse.json({ review: [{ generated_text: generatedText }] });
   } catch {
     return NextResponse.json(
       { error: "Internal server error" },

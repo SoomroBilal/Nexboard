@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { buildRateLimitKey, checkRateLimit } from "@/lib/rate-limit";
+import { InferenceClient } from "@huggingface/inference";
+import { HUGGING_FACE_MODELS, HUGGING_FACE_TOKEN } from "@/lib/constants";
 
 export async function POST(request: Request) {
   try {
@@ -22,7 +24,7 @@ export async function POST(request: Request) {
 
     const prompt = `Simulate an email conversation. Context: ${scenario || "client onboarding meeting follow-up"}. The user responded with: "${userResponse}". Generate a realistic reply from the client, including potential objections or concerns.`;
 
-    const apiToken = process.env.HUGGING_FACE_API_TOKEN;
+    const apiToken = HUGGING_FACE_TOKEN;
     if (!apiToken) {
       return NextResponse.json(
         { error: "Hugging Face API token not configured" },
@@ -30,30 +32,22 @@ export async function POST(request: Request) {
       );
     }
 
-    const response = await fetch(
-      "https://api-inference.huggingface.co/models/facebook/blenderbot-400M-distill",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiToken}`,
-          "Content-Type": "application/json",
+    const client = new InferenceClient(apiToken);
+    const completion = await client.chatCompletion({
+      model: HUGGING_FACE_MODELS.CHAT,
+      messages: [
+        {
+          role: "system",
+          content: "You are role-playing a realistic email recipient in a professional business setting.",
         },
-        body: JSON.stringify({
-          inputs: prompt,
-          parameters: { max_new_tokens: 200, temperature: 0.7 },
-        }),
-      }
-    );
+        { role: "user", content: prompt },
+      ],
+      max_tokens: 260,
+      temperature: 0.7,
+    });
 
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: "Hugging Face API error" },
-        { status: response.status }
-      );
-    }
-
-    const result = await response.json();
-    return NextResponse.json({ reply: result });
+    const generatedText = completion.choices?.[0]?.message?.content ?? "";
+    return NextResponse.json({ reply: [{ generated_text: generatedText }] });
   } catch {
     return NextResponse.json(
       { error: "Internal server error" },

@@ -100,7 +100,6 @@ export default function PlaygroundDetailPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             prompt: `${config.promptPrefix}${userInput}`,
-            model: params.playgroundId === "debugging" ? "codellama/CodeLlama-7b-hf" : undefined,
           }),
         });
 

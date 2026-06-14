@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { buildRateLimitKey, checkRateLimit } from "@/lib/rate-limit";
+import { InferenceClient } from "@huggingface/inference";
+import { HUGGING_FACE_MODELS, HUGGING_FACE_TOKEN } from "@/lib/constants";
 
 export async function POST(request: Request) {
   try {
@@ -24,7 +26,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Document content is required" }, { status: 400 });
     }
 
-    const apiToken = process.env.HUGGING_FACE_API_TOKEN;
+    const apiToken = HUGGING_FACE_TOKEN;
     if (!apiToken) {
       return NextResponse.json(
         { error: "Hugging Face API token not configured" },
@@ -32,30 +34,23 @@ export async function POST(request: Request) {
       );
     }
 
-    const response = await fetch(
-      "https://api-inference.huggingface.co/models/impira/layoutlm-document-qa",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiToken}`,
-          "Content-Type": "application/json",
+    const prompt = `Analyze the following document. Question: ${question || "Summarize this document"}\n\nDocument:\n${document}`;
+    const client = new InferenceClient(apiToken);
+    const completion = await client.chatCompletion({
+      model: HUGGING_FACE_MODELS.CHAT,
+      messages: [
+        {
+          role: "system",
+          content: "You are a document analyst. Extract key points, risks, and recommended actions clearly.",
         },
-        body: JSON.stringify({
-          inputs: { question: question || "Summarize this document", context: document },
-          parameters: { max_new_tokens: 300 },
-        }),
-      }
-    );
+        { role: "user", content: prompt },
+      ],
+      max_tokens: 320,
+      temperature: 0.3,
+    });
 
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: "Hugging Face API error" },
-        { status: response.status }
-      );
-    }
-
-    const result = await response.json();
-    return NextResponse.json({ analysis: result });
+    const generatedText = completion.choices?.[0]?.message?.content ?? "";
+    return NextResponse.json({ analysis: [{ generated_text: generatedText }] });
   } catch {
     return NextResponse.json(
       { error: "Internal server error" },
