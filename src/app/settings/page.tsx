@@ -5,14 +5,22 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { User, Building2, Save, Check } from "lucide-react";
-import { useEffect, useState } from "react";
+import { User, Building2, Save, Check, Upload, Loader2, Shield, Fingerprint, Globe } from "lucide-react";
+import { useEffect, useState, use, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import Image from "next/image";
 
-export default function SettingsPage() {
+export default function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
   const router = useRouter();
-  const [tab, setTab] = useState<"profile" | "company">("profile");
+  const { tab: initialTab } = use(searchParams);
+  const [tab, setTab] = useState<"profile" | "company">(
+    initialTab === "company" ? "company" : "profile"
+  );
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
 
@@ -24,6 +32,11 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -42,12 +55,13 @@ export default function SettingsPage() {
       if (profile) {
         setProfileId(profile.id);
         setFullName(profile.full_name);
+        if (profile.avatar_url) setAvatarUrl(profile.avatar_url);
 
         if (profile.company_id) {
           setCompanyId(profile.company_id);
           const { data: company } = await supabase
             .from("companies")
-            .select("name, slug, domain")
+            .select("name, slug, domain, logo_url")
             .eq("id", profile.company_id)
             .single();
 
@@ -55,6 +69,7 @@ export default function SettingsPage() {
             setCompanyName(company.name);
             setCompanySlug(company.slug);
             setCompanyDomain(company.domain ?? "");
+            if (company.logo_url) setLogoUrl(company.logo_url);
           }
         }
       }
@@ -101,6 +116,31 @@ export default function SettingsPage() {
       setTimeout(() => setSaved(false), 2000);
     }
     setSaving(false);
+  };
+
+  const handleUpload = async (file: File, owner: string, type: "avatar" | "logo") => {
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("owner", owner);
+
+      const res = await fetch("/api/upload", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+
+      const supabase = createClient();
+      if (type === "avatar") {
+        await supabase.from("profiles").update({ avatar_url: data.url }).eq("id", profileId!);
+        setAvatarUrl(data.url);
+      } else {
+        await supabase.from("companies").update({ logo_url: data.url }).eq("id", companyId!);
+        setLogoUrl(data.url);
+      }
+    } catch {
+      // silently fail
+    }
+    setUploading(false);
   };
 
   const handleReplayTour = () => {
@@ -163,9 +203,26 @@ export default function SettingsPage() {
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-4">
                   <Avatar className="h-16 w-16">
-                    <AvatarFallback className="text-lg">{fullName.charAt(0) || "U"}</AvatarFallback>
+                    {avatarUrl ? (
+                      <Image src={avatarUrl} alt="Avatar" fill className="object-cover rounded-full" />
+                    ) : (
+                      <AvatarFallback className="text-lg">{fullName.charAt(0) || "U"}</AvatarFallback>
+                    )}
                   </Avatar>
-                  <Button variant="outline" size="sm">Change Avatar</Button>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file && profileId) handleUpload(file, profileId, "avatar");
+                    }}
+                  />
+                  <Button variant="outline" size="sm" onClick={() => avatarInputRef.current?.click()} disabled={uploading}>
+                    {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    {uploading ? "Uploading..." : "Change Avatar"}
+                  </Button>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
@@ -185,6 +242,28 @@ export default function SettingsPage() {
                 </Button>
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Shield className="h-4 w-4 text-purple-600" /> Security
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+                  <div className="flex items-center gap-3">
+                    <Fingerprint className="h-5 w-5 text-zinc-400" />
+                    <div>
+                      <p className="text-sm font-medium">Multi-Factor Authentication</p>
+                      <p className="text-xs text-zinc-500">Add an extra layer of security to your account.</p>
+                    </div>
+                  </div>
+                  <Button variant="outline" size="sm" disabled>
+                    Coming Soon
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </>
         ) : (
           <Card>
@@ -196,10 +275,29 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-950">
-                  <Building2 className="h-8 w-8 text-purple-600" />
-                </div>
-                <Button variant="outline" size="sm">Upload Logo</Button>
+                {logoUrl ? (
+                  <div className="relative h-16 w-16 overflow-hidden rounded-lg">
+                    <Image src={logoUrl} alt="Company logo" fill className="object-cover" />
+                  </div>
+                ) : (
+                  <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-950">
+                    <Building2 className="h-8 w-8 text-purple-600" />
+                  </div>
+                )}
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file && companyId) handleUpload(file, companyId, "logo");
+                  }}
+                />
+                <Button variant="outline" size="sm" onClick={() => logoInputRef.current?.click()} disabled={uploading}>
+                  {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  {uploading ? "Uploading..." : "Upload Logo"}
+                </Button>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
@@ -221,6 +319,26 @@ export default function SettingsPage() {
               <Button className="gap-2" onClick={handleCompanySave} disabled={saving}>
                 {saved ? <><Check className="h-4 w-4" /> Saved</> : <><Save className="h-4 w-4" /> Save Changes</>}
               </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Globe className="h-4 w-4 text-blue-600" /> Single Sign-On
+              </CardTitle>
+              <CardDescription>Configure SSO for your organization.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+                <div>
+                  <p className="text-sm font-medium">SSO via SAML / OIDC</p>
+                  <p className="text-xs text-zinc-500">Manage SSO settings in Integrations.</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => router.push("/admin/integrations")}>
+                  Configure
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}

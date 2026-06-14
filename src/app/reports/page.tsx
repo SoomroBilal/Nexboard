@@ -1,7 +1,8 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BarChart3, TrendingUp, Users, Download } from "lucide-react";
+import { BarChart3, TrendingUp, Users, Download, ArrowRight } from "lucide-react";
+import Link from "next/link";
 
 export default function ReportsPage() {
   return (
@@ -18,44 +19,50 @@ export default function ReportsPage() {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-3">
-          <Card className="cursor-pointer transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900">
-            <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
-              <Users className="h-10 w-10 text-blue-600" />
-              <CardTitle className="text-base">HR / L&D Reports</CardTitle>
-              <p className="text-xs text-zinc-500">
-                Program effectiveness, readiness scores, compliance tracking
-              </p>
-              <Button variant="outline" size="sm" className="mt-2">
-                View Reports
-              </Button>
-            </CardContent>
-          </Card>
+          <Link href="/reports/hr-ld">
+            <Card className="cursor-pointer transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900">
+              <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
+                <Users className="h-10 w-10 text-blue-600" />
+                <CardTitle className="text-base">HR / L&D Reports</CardTitle>
+                <p className="text-xs text-zinc-500">
+                  Program effectiveness, readiness scores, compliance tracking
+                </p>
+                <Button variant="outline" size="sm" className="mt-2 gap-1">
+                  View Reports <ArrowRight className="h-3 w-3" />
+                </Button>
+              </CardContent>
+            </Card>
+          </Link>
 
-          <Card className="cursor-pointer transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900">
-            <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
-              <TrendingUp className="h-10 w-10 text-purple-600" />
-              <CardTitle className="text-base">Leadership Reports</CardTitle>
-              <p className="text-xs text-zinc-500">
-                Executive KPIs, ROI metrics, talent pipeline insights
-              </p>
-              <Button variant="outline" size="sm" className="mt-2">
-                View Reports
-              </Button>
-            </CardContent>
-          </Card>
+          <Link href="/reports/leadership">
+            <Card className="cursor-pointer transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900">
+              <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
+                <TrendingUp className="h-10 w-10 text-purple-600" />
+                <CardTitle className="text-base">Leadership Reports</CardTitle>
+                <p className="text-xs text-zinc-500">
+                  Executive KPIs, ROI metrics, talent pipeline insights
+                </p>
+                <Button variant="outline" size="sm" className="mt-2 gap-1">
+                  View Reports <ArrowRight className="h-3 w-3" />
+                </Button>
+              </CardContent>
+            </Card>
+          </Link>
 
-          <Card className="cursor-pointer transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900">
-            <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
-              <BarChart3 className="h-10 w-10 text-green-600" />
-              <CardTitle className="text-base">IT / Security Reports</CardTitle>
-              <p className="text-xs text-zinc-500">
-                System health, security incidents, compliance status
-              </p>
-              <Button variant="outline" size="sm" className="mt-2">
-                View Reports
-              </Button>
-            </CardContent>
-          </Card>
+          <Link href="/reports/it-security">
+            <Card className="cursor-pointer transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900">
+              <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
+                <BarChart3 className="h-10 w-10 text-green-600" />
+                <CardTitle className="text-base">IT / Security Reports</CardTitle>
+                <p className="text-xs text-zinc-500">
+                  System health, security incidents, compliance status
+                </p>
+                <Button variant="outline" size="sm" className="mt-2 gap-1">
+                  View Reports <ArrowRight className="h-3 w-3" />
+                </Button>
+              </CardContent>
+            </Card>
+          </Link>
         </div>
       </div>
     </DashboardLayout>

@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
 import { Search, MoreHorizontal, Mail, UserPlus, Shield, Pencil, Link, Copy, Check, RotateCcw, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile, Invite, UserRole } from "@/lib/types";
 
@@ -25,8 +25,15 @@ function getInviteLink(token: string) {
   return `${base}/auth/signup?invite=${token}`;
 }
 
-export default function AdminUsersPage() {
-  const [tab, setTab] = useState<"users" | "invites">("users");
+export default function AdminUsersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
+  const { tab: initialTab } = use(searchParams);
+  const [tab, setTab] = useState<"users" | "invites">(
+    initialTab === "invites" ? "invites" : "users"
+  );
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editUserId, setEditUserId] = useState<string | null>(null);

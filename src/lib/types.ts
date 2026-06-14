@@ -60,7 +60,7 @@ export interface Playground {
   id: string;
   company_id: string;
   name: string;
-  type: "code_review" | "email_simulation" | "debugging" | "general";
+  type: "code_review" | "email_simulation" | "debugging" | "sales" | "marketing" | "leadership" | "document_analysis" | "general";
   configuration: Record<string, unknown>;
   created_at: string;
   updated_at: string;

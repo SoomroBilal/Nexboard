@@ -2,9 +2,69 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Shield, Server, Download, CheckCircle, Clock } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import { Shield, Server, Download, Users, Clock, AlertTriangle } from "lucide-react";
 
-export default function ITSecurityReportsPage() {
+async function getReportData() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("company_id")
+    .eq("id", user.id)
+    .single();
+  if (!profile?.company_id) return null;
+  const cid = profile.company_id;
+
+  const { count: totalUsers } = await supabase
+    .from("profiles")
+    .select("id", { count: "exact", head: true })
+    .eq("company_id", cid);
+
+  const { count: adminUsers } = await supabase
+    .from("profiles")
+    .select("id", { count: "exact", head: true })
+    .eq("company_id", cid)
+    .in("role", ["company_admin", "super_admin"]);
+
+  const { count: activeHires } = await supabase
+    .from("profiles")
+    .select("id", { count: "exact", head: true })
+    .eq("company_id", cid)
+    .eq("role", "new_hire");
+
+  const { data: latestMetrics } = await supabase
+    .from("performance_metrics")
+    .select("score, created_at")
+    .eq("company_id", cid)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  const recentAvg = latestMetrics && latestMetrics.length > 0 ? latestMetrics[0].score : 0;
+
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000).toISOString();
+  const { count: recentScores } = await supabase
+    .from("performance_metrics")
+    .select("id", { count: "exact", head: true })
+    .eq("company_id", cid)
+    .gte("created_at", thirtyDaysAgo);
+
+  return {
+    totalUsers: totalUsers ?? 0,
+    adminUsers: adminUsers ?? 0,
+    activeHires: activeHires ?? 0,
+    recentAvg,
+    recentScores: recentScores ?? 0,
+  };
+}
+
+export default async function ITSecurityReportsPage() {
+  const data = await getReportData();
+  if (!data) return null;
+
   return (
     <DashboardLayout allowedRoles={["it_security", "company_admin", "super_admin"]}>
       <div className="space-y-6">
@@ -20,18 +80,16 @@ export default function ITSecurityReportsPage() {
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { label: "Security Score", value: "A", change: "Excellent", icon: Shield, color: "text-green-600" },
-            { label: "Uptime (30d)", value: "99.97%", change: "No major incidents", icon: Server, color: "text-blue-600" },
-            { label: "Open Vulnerabilities", value: "0", change: "All resolved", icon: CheckCircle, color: "text-green-600" },
-            { label: "Avg. Response Time", value: "42ms", change: "Within SLA", icon: Clock, color: "text-purple-600" },
+            { label: "Total Users", value: String(data.totalUsers), icon: Users, color: "text-blue-600", change: "All roles" },
+            { label: "Admin Accounts", value: String(data.adminUsers), icon: Shield, color: "text-amber-600", change: "Privileged access" },
+            { label: "Active New Hires", value: String(data.activeHires), icon: AlertTriangle, color: "text-purple-600", change: "Currently onboarded" },
+            { label: "Metrics (30d)", value: String(data.recentScores), icon: Clock, color: "text-green-600", change: "Recent evaluations" },
           ].map((stat) => {
             const Icon = stat.icon;
             return (
               <Card key={stat.label}>
                 <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <Icon className={`h-5 w-5 ${stat.color}`} />
-                  </div>
+                  <Icon className={`h-5 w-5 ${stat.color}`} />
                   <p className="mt-2 text-2xl font-bold">{stat.value}</p>
                   <p className="text-sm text-zinc-500">{stat.label}</p>
                   <p className="text-xs text-zinc-400">{stat.change}</p>
@@ -44,14 +102,14 @@ export default function ITSecurityReportsPage() {
         <div className="grid gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>Security Incidents (30 days)</CardTitle>
+              <CardTitle>System Health (30 days)</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {[
-                { event: "Failed Authentication Attempts", count: 142, trend: "stable" as const },
-                { event: "Suspicious IP Blocks", count: 8, trend: "decreasing" as const },
-                { event: "API Rate Limit Exceeded", count: 3, trend: "stable" as const },
-                { event: "Data Access Audits", count: 24, trend: "increasing" as const },
+                { event: "Total Users", count: data.totalUsers, trend: "active" as const },
+                { event: "Admin Accounts", count: data.adminUsers, trend: "active" as const },
+                { event: "Active New Hires", count: data.activeHires, trend: "active" as const },
+                { event: "Recent Metric Entries", count: data.recentScores, trend: data.recentScores > 0 ? "active" as const : "warning" as const },
               ].map((item) => (
                 <div
                   key={item.event}
@@ -60,12 +118,7 @@ export default function ITSecurityReportsPage() {
                   <span className="text-sm">{item.event}</span>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">{item.count}</span>
-                    <Badge
-                      variant={
-                        item.trend === "increasing" ? "warning" :
-                        item.trend === "decreasing" ? "success" : "secondary"
-                      }
-                    >
+                    <Badge variant={item.trend === "active" ? "success" : "warning"}>
                       {item.trend}
                     </Badge>
                   </div>
@@ -80,10 +133,9 @@ export default function ITSecurityReportsPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               {[
-                { standard: "SOC 2 Type II", status: "Compliant", expiry: "Dec 2026" },
-                { standard: "GDPR", status: "Compliant", expiry: "Ongoing" },
-                { standard: "CCPA", status: "In Progress", expiry: "Target: Jul 2026" },
-                { standard: "ISO 27001", status: "Compliant", expiry: "Mar 2027" },
+                { standard: "User Access Control", status: "Active", expiry: `${data.totalUsers} users managed` },
+                { standard: "Role-Based Access", status: "Active", expiry: `${data.adminUsers} admin accounts` },
+                { standard: "Data Isolation", status: "Per-Company", expiry: "Multi-tenant enabled" },
               ].map((item) => (
                 <div
                   key={item.standard}
@@ -91,11 +143,9 @@ export default function ITSecurityReportsPage() {
                 >
                   <div>
                     <p className="text-sm font-medium">{item.standard}</p>
-                    <p className="text-xs text-zinc-500">Expires: {item.expiry}</p>
+                    <p className="text-xs text-zinc-500">{item.expiry}</p>
                   </div>
-                  <Badge variant={item.status === "Compliant" ? "success" : "warning"}>
-                    {item.status}
-                  </Badge>
+                  <Badge variant="success">Active</Badge>
                 </div>
               ))}
             </CardContent>

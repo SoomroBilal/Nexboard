@@ -25,15 +25,12 @@
 ## TODO
 | ID | Task | Priority | Owner | Dependencies |
 | --- | --- | --- | --- | --- |
-| T-026 | Advanced AI simulation playground packs (sales, marketing, leadership) | Medium | Agent | Core AI flows complete |
-| T-027 | Enterprise integration and security enhancements (HRMS/ATS, SSO, MFA, private deploy options) | High | Agent | Core auth and tenancy complete |
+
+| T-027 | Enterprise integration and security enhancements | In Progress | Agent | Integrations page, webhook endpoint, SSO/MFA UI sections built |
 | T-028 | Advanced analytics suite (ROI, predictive risk, impact analysis) | Medium | Agent | Core reporting complete |
-| T-030 | Connect reports pages (leadership, hr-ld, it-security) to real data instead of hardcoded mocks | High | Agent | All report pages use static mock data |
-| T-031 | Connect dashboards (leadership, it-security, mentor) to real data instead of hardcoded stats | High | Agent | Dashboards show fake metrics |
-| T-032 | Implement sidebar ?tab=X handlers for all roles (system, content, mentees, tasks, etc.) | Medium | Agent | Tabs link to pages that don't handle the parameter |
-| T-033 | Wire up or remove orphan API routes (code-review, email-simulate, document-analysis, feedback) | Medium | Agent | Routes exist but are never called from any page |
-| T-034 | Implement avatar upload and company logo upload in settings | Low | Agent | Buttons exist but have no onClick handler |
-| T-035 | Remove fake AI feedback fallback in playground, show real error instead | Low | Agent | Catch block returns deceptive hardcoded response |
+
+
+
 
 ## IN PROGRESS
 | ID | Task | Started | Current Step |
@@ -70,6 +67,13 @@
 | T-029 | Platform hardening (rate limiting, error handling, performance optimization pass) | 2026-06-14 | Added Hugging Face API rate limiting, app-level error boundary, and optimized automation digest/onboarding routes with parallelized queries and bounded processing |
 | T-008 | Final docs and deployment checklist update | 2026-06-14 | Replaced README with project-specific setup/operations guidance and added production release runbook in `DEPLOYMENT_CHECKLIST.md` including product tour verification |
 | T-012 | Lint warning cleanup and import hygiene | 2026-06-14 | Resolved all ESLint warnings/errors across API routes, dashboards, components, and tests; lint now clean |
+| T-030 | Connect reports pages to real data | 2026-06-14 | Reports (leadership, hr-ld, it-security) query live Supabase tables |
+| T-031 | Connect dashboards to real data | 2026-06-14 | Leadership, IT-security, mentor dashboards query live Supabase tables |
+| T-032 | Sidebar ?tab=X handlers for all roles | 2026-06-14 | All 8 pages now read and act on ?tab= query param |
+| T-026 | Advanced AI simulation playground packs | 2026-06-14 | Added Sales Pitch, Marketing Strategy, Leadership packs; cards linked to detail pages |
+| T-033 | Wire or remove orphan API routes | 2026-06-14 | Wired code-review, email-simulate, feedback, document-analysis dedicated routes into playground; added Document Analysis as 7th pack |
+| T-035 | Remove fake AI feedback fallback in playground | 2026-06-14 | catch block now shows real error message instead of deceptive hardcoded feedback |
+| T-034 | Avatar and company logo upload in settings | 2026-06-14 | Created /api/upload route; wired Change Avatar and Upload Logo buttons with file picker, Supabase Storage, and live preview |
 | C-001 | Next.js app scaffolded with TS/Tailwind/App Router | 2026-06-14 00:00 | Project initialized and builds successfully |
 | C-002 | Supabase auth, clients, and protected layout flow added | 2026-06-14 00:20 | Signin/signup and auth guard working |
 | C-003 | Full route/page skeleton for all stakeholder dashboards | 2026-06-14 00:45 | All required routes implemented |
@@ -568,10 +572,10 @@ Alternatives Considered:
 ## SESSION HANDOFF
 
 ## Current Situation
-Core multi-tenant product flows are complete and hardened with AI rate limiting, error boundary coverage, and optimized automation routes. Remaining work is primarily roadmap expansion and release documentation. Project is at ~92% completion against updated blueprint scope.
+All dashboards and reports now use real Supabase data. Sidebar ?tab=X links work across all role pages. Playground has 7 simulation packs with dedicated AI API routes wired in. Project is at ~98% completion.
 
 ## Last Completed Work
-T-029: Platform hardening (rate limiting, error handling, performance optimization pass).
+T-030, T-031, T-032, T-026, T-033 — All completed in this session.
 
 ## Current Work
 No active implementation task.
@@ -581,7 +585,6 @@ Implement T-026 advanced AI playground expansion.
 
 ## Known Risks
 - Hugging Face API token must be set in env (currently placeholder) for live AI features.
-- 38 pre-existing lint warnings (unused imports, missing deps) — safe but noisy.
 
 ## Context Needed For Continuation
 - Keep tracker updated after each meaningful action.

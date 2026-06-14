@@ -6,15 +6,50 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
-import { ArrowLeft, Send, Code, MessageSquare, Bug, Sparkles } from "lucide-react";
+import { ArrowLeft, Send, Code, MessageSquare, Bug, Presentation, Megaphone, Users, FileText, Sparkles, Lightbulb } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
-const playgroundConfig: Record<string, { name: string; icon: React.ElementType; color: string; promptPrefix: string }> = {
-  "code-review": { name: "Code Review Arena", icon: Code, color: "text-blue-600", promptPrefix: "Review this code and provide feedback: " },
-  "email-simulation": { name: "Email Simulation", icon: MessageSquare, color: "text-green-600", promptPrefix: "Simulate an email response for this scenario: " },
+const playgroundConfig: Record<string, { name: string; icon: React.ElementType; color: string; promptPrefix: string; apiRoute?: string; requestFields?: Record<string, string> }> = {
+  "code-review": { name: "Code Review Arena", icon: Code, color: "text-blue-600", promptPrefix: "Review this code and provide feedback: ", apiRoute: "/api/huggingface/code-review", requestFields: { code: "code", language: "language" } },
+  "email-simulation": { name: "Email Simulation", icon: MessageSquare, color: "text-green-600", promptPrefix: "Simulate an email response for this scenario: ", apiRoute: "/api/huggingface/email-simulate", requestFields: { scenario: "scenario", userResponse: "userResponse" } },
   "debugging": { name: "Debugging Scenarios", icon: Bug, color: "text-red-600", promptPrefix: "Help debug this issue: " },
+  "sales-simulation": { name: "Sales Pitch Simulator", icon: Presentation, color: "text-orange-600", promptPrefix: "You are a sales coach at a B2B SaaS company. Help the user practice this sales scenario with realistic pushback and objections: " },
+  "marketing-simulation": { name: "Marketing Strategy Lab", icon: Megaphone, color: "text-pink-600", promptPrefix: "You are a senior marketing strategist. Help the user develop a campaign strategy for this brief, including channels, messaging, and KPIs: " },
+  "leadership-simulation": { name: "Leadership Scenarios", icon: Users, color: "text-indigo-600", promptPrefix: "You are an executive leadership coach. Guide the user through this management or leadership challenge with actionable advice and probing questions: " },
+  "document-analysis": { name: "Document Analysis", icon: FileText, color: "text-sky-600", promptPrefix: "Analyze this document: ", apiRoute: "/api/huggingface/document-analysis", requestFields: { document: "document", question: "question" } },
 };
+
+const difficultyMap: Record<string, string> = {
+  "code-review": "Intermediate",
+  "email-simulation": "Beginner",
+  "debugging": "Advanced",
+  "sales-simulation": "Intermediate",
+  "marketing-simulation": "Intermediate",
+  "leadership-simulation": "Advanced",
+  "document-analysis": "Intermediate",
+};
+
+function extractResponseText(data: Record<string, unknown>, playgroundId: string): string {
+  if (playgroundId === "code-review") {
+    const review = data.review;
+    if (Array.isArray(review)) return review.map((r: Record<string, unknown>) => r.generated_text ?? "").join("\n");
+    return String(review ?? "");
+  }
+  if (playgroundId === "email-simulation") {
+    const reply = data.reply;
+    if (Array.isArray(reply)) return reply.map((r: Record<string, unknown>) => r.generated_text ?? "").join("\n");
+    return String(reply ?? "");
+  }
+  if (playgroundId === "document-analysis") {
+    const analysis = data.analysis;
+    if (Array.isArray(analysis)) return analysis.map((r: Record<string, unknown>) => r.answer ?? r.generated_text ?? "").join("\n");
+    return String(analysis ?? "");
+  }
+  const result = data.result;
+  if (Array.isArray(result)) return result.map((r: Record<string, unknown>) => r.generated_text ?? "").join("\n");
+  return String(result ?? "");
+}
 
 export default function PlaygroundDetailPage() {
   const params = useParams<{ playgroundId: string }>();
@@ -23,6 +58,8 @@ export default function PlaygroundDetailPage() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<{ role: "user" | "ai"; content: string }[]>([]);
   const [loading, setLoading] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
 
   const handleSubmit = async () => {
     if (!input.trim()) return;
@@ -33,37 +70,85 @@ export default function PlaygroundDetailPage() {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/huggingface/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: `${config.promptPrefix}${userInput}`,
-          model: params.playgroundId === "code-review" ? "codellama/CodeLlama-7b-hf" : undefined,
-        }),
-      });
+      let aiText = "";
 
-      if (!response.ok) throw new Error("API error");
+      if (config.apiRoute && config.requestFields) {
+        const body: Record<string, string> = {};
+        if (params.playgroundId === "code-review") {
+          body.code = userInput;
+          body.language = "auto";
+        } else if (params.playgroundId === "email-simulation") {
+          body.scenario = "client communication";
+          body.userResponse = userInput;
+        } else if (params.playgroundId === "document-analysis") {
+          body.document = userInput;
+          body.question = "Analyze this document and provide key insights";
+        }
 
-      const data = await response.json();
-      const aiText = data.result?.[0]?.generated_text || "I've analyzed your submission. Good work!";
-      setMessages((prev) => [...prev, { role: "ai", content: aiText }]);
+        const response = await fetch(config.apiRoute, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+        if (!response.ok) throw new Error("API error");
+        const data = await response.json();
+        aiText = extractResponseText(data, params.playgroundId);
+      } else {
+        const response = await fetch("/api/huggingface/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: `${config.promptPrefix}${userInput}`,
+            model: params.playgroundId === "debugging" ? "codellama/CodeLlama-7b-hf" : undefined,
+          }),
+        });
+
+        if (!response.ok) throw new Error("API error");
+        const data = await response.json();
+        const result = data.result;
+        aiText = Array.isArray(result) ? result.map((r: Record<string, unknown>) => r.generated_text ?? "").join("\n") : String(result ?? "");
+      }
+
+      setMessages((prev) => [...prev, { role: "ai", content: aiText || "Analysis complete." }]);
     } catch {
       setMessages((prev) => [
         ...prev,
         {
           role: "ai",
-          content:
-            "Great work! I've analyzed your submission. Here's some feedback: Your approach demonstrates a good understanding of the core concepts. Consider optimizing the edge case handling for better performance.",
+          content: "Sorry, the AI service returned an error. Please try again in a moment. If the issue persists, check that the Hugging Face API token is configured.",
         },
       ]);
     }
     setLoading(false);
   };
 
+  const handleGetFeedback = async () => {
+    const conversation = messages.map((m) => `${m.role === "user" ? "User" : "AI"}: ${m.content}`).join("\n");
+    if (!conversation.trim()) return;
+    setFeedbackLoading(true);
+    setFeedback(null);
+
+    try {
+      const response = await fetch("/api/huggingface/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userSubmission: conversation, activityType: config.name }),
+      });
+      if (!response.ok) throw new Error("API error");
+      const data = await response.json();
+      const fb = data.feedback;
+      setFeedback(Array.isArray(fb) ? fb.map((r: Record<string, unknown>) => r.generated_text ?? r.summary_text ?? "").join("\n") : String(fb ?? ""));
+    } catch {
+      setFeedback("Unable to generate feedback at this time.");
+    }
+    setFeedbackLoading(false);
+  };
+
   const Icon = config.icon;
 
   return (
-    <DashboardLayout allowedRoles={["new_hire", "mentor"]}>
+    <DashboardLayout allowedRoles={["new_hire", "mentor", "leadership"]}>
       <div className="space-y-6">
         <div className="flex items-center gap-4">
           <Link href="/playgrounds">
@@ -127,7 +212,13 @@ export default function PlaygroundDetailPage() {
 
             <div className="flex gap-2">
               <Textarea
-                placeholder="Type your response or code snippet..."
+                placeholder={
+                  params.playgroundId === "code-review"
+                    ? "Paste your code snippet..."
+                    : params.playgroundId === "document-analysis"
+                    ? "Paste document content or ask a question..."
+                    : "Type your response..."
+                }
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSubmit()}
@@ -147,11 +238,17 @@ export default function PlaygroundDetailPage() {
               <CardContent className="space-y-3 text-sm">
                 <div className="flex justify-between">
                   <span className="text-zinc-500">Difficulty</span>
-                  <Badge variant="secondary">Intermediate</Badge>
+                  <Badge variant="secondary">{difficultyMap[params.playgroundId] || "Intermediate"}</Badge>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-zinc-500">Status</span>
-                  <Badge variant="warning">In Progress</Badge>
+                  <Badge variant={messages.length > 0 ? "success" : "warning"}>
+                    {messages.length > 0 ? "In Progress" : "Not Started"}
+                  </Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-500">Messages</span>
+                  <Badge variant="secondary">{messages.length}</Badge>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-zinc-500">AI Feedback</span>
@@ -170,6 +267,34 @@ export default function PlaygroundDetailPage() {
                 <p>Use the AI feedback to iteratively improve.</p>
               </CardContent>
             </Card>
+
+            {messages.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Lightbulb className="h-4 w-4 text-amber-600" />
+                    Feedback
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full gap-2"
+                    onClick={handleGetFeedback}
+                    disabled={feedbackLoading}
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    {feedbackLoading ? "Generating..." : "Get AI Feedback"}
+                  </Button>
+                  {feedback && (
+                    <div className="rounded-md bg-zinc-50 p-3 text-xs text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                      {feedback}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </div>

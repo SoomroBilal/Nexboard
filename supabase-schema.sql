@@ -34,6 +34,8 @@ CREATE TABLE public.companies (
   slug TEXT UNIQUE NOT NULL,
   domain TEXT,
   logo_url TEXT,
+  plan TEXT DEFAULT 'Starter',
+  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
   settings JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -86,7 +88,7 @@ CREATE TABLE public.playgrounds (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
-  type TEXT NOT NULL CHECK (type IN ('code_review', 'email_simulation', 'debugging', 'general')),
+  type TEXT NOT NULL CHECK (type IN ('code_review', 'email_simulation', 'debugging', 'sales', 'marketing', 'leadership', 'document_analysis', 'general')),
   configuration JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()

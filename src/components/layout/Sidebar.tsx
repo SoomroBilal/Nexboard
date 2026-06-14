@@ -21,6 +21,7 @@ import {
   Globe,
   Mail,
   Briefcase,
+  Link,
 } from "lucide-react";
 
 const roleMenuItems: Record<UserRole, { label: string; href: string; icon: React.ElementType }[]> = {
@@ -28,6 +29,7 @@ const roleMenuItems: Record<UserRole, { label: string; href: string; icon: React
     { label: "Dashboard", href: "/dashboard/super-admin", icon: LayoutDashboard },
     { label: "Companies", href: "/dashboard/super-admin?tab=companies", icon: Globe },
     { label: "Users", href: "/dashboard/super-admin?tab=users", icon: Users },
+    { label: "Integrations", href: "/admin/integrations", icon: Link },
     { label: "System Health", href: "/dashboard/super-admin?tab=system", icon: Shield },
     { label: "Settings", href: "/settings", icon: Settings },
   ],
@@ -38,6 +40,7 @@ const roleMenuItems: Record<UserRole, { label: string; href: string; icon: React
     { label: "Programs", href: "/admin/programs", icon: GraduationCap },
     { label: "Tasks", href: "/admin/tasks", icon: FileText },
     { label: "Content", href: "/admin/content", icon: BookOpen },
+    { label: "Integrations", href: "/admin/integrations", icon: Link },
     { label: "Reports", href: "/reports", icon: BarChart3 },
     { label: "Company Settings", href: "/settings?tab=company", icon: Briefcase },
   ],
