@@ -143,14 +143,6 @@ export default function SettingsPage({
     setUploading(false);
   };
 
-  const handleReplayTour = () => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("force_product_tour", "1");
-    }
-    router.push("/dashboard");
-    router.refresh();
-  };
-
   if (loading) {
     return (
       <DashboardLayout>
@@ -236,9 +228,6 @@ export default function SettingsPage({
                 </div>
                 <Button className="gap-2" onClick={handleProfileSave} disabled={saving}>
                   {saved ? <><Check className="h-4 w-4" /> Saved</> : <><Save className="h-4 w-4" /> Save Changes</>}
-                </Button>
-                <Button type="button" variant="outline" onClick={handleReplayTour}>
-                  Replay Product Tour
                 </Button>
               </CardContent>
             </Card>
