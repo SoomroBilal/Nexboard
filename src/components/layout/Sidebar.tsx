@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import NextLink from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/types";
@@ -103,7 +103,7 @@ export function Sidebar({
   return (
     <aside className="flex h-full flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
       <div className="flex h-14 items-center border-b border-zinc-200 px-4 dark:border-zinc-800">
-        <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
+        <NextLink href="/dashboard" className="flex items-center gap-2 font-semibold">
           <BrainCircuit className="h-6 w-6 text-purple-600" />
           <div className="flex flex-col">
             <span className="text-lg leading-tight">Nexboard</span>
@@ -111,16 +111,16 @@ export function Sidebar({
               <span className="text-[10px] font-normal text-zinc-500">{companyName}</span>
             )}
           </div>
-        </Link>
-      </div>
-      <nav className="flex-1 overflow-y-auto p-3">
+         </NextLink>
+       </div>
+       <nav className="flex-1 overflow-y-auto p-3">
         <ul className="space-y-1">
           {items.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href || pathname.startsWith(item.href.split("?")[0]);
             return (
               <li key={item.href}>
-                <Link
+                <NextLink
                   href={item.href}
                   onClick={onClose}
                   className={cn(
@@ -132,14 +132,14 @@ export function Sidebar({
                 >
                   <Icon className="h-4 w-4" />
                   {item.label}
-                </Link>
+                </NextLink>
               </li>
             );
           })}
         </ul>
       </nav>
       <div className="border-t border-zinc-200 p-3 dark:border-zinc-800">
-        <Link
+        <NextLink
           href="/settings"
           className={cn(
             "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
@@ -150,7 +150,7 @@ export function Sidebar({
         >
           <Settings className="h-4 w-4" />
           Settings
-        </Link>
+        </NextLink>
       </div>
     </aside>
   );

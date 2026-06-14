@@ -3,23 +3,19 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 const BUCKET = "uploads";
 
+async function ensureBucket() {
+  const supabase = createAdminClient();
+  const { data: existing } = await supabase.storage.getBucket(BUCKET);
+  if (!existing) {
+    await supabase.storage.createBucket(BUCKET, { public: true });
+  }
+}
+
 export async function POST(request: Request) {
   try {
-    const supabase = createAdminClient();
-
-    const { bucket } = await supabase.storage.getBucket(BUCKET);
-    if (!bucket) {
-      await supabase.storage.createBucket(BUCKET, { public: true });
-    }
+    await ensureBucket();
   } catch {
-    try {
-      const { data: existing } = await supabase.storage.getBucket(BUCKET);
-      if (!existing) {
-        await supabase.storage.createBucket(BUCKET, { public: true });
-      }
-    } catch {
-      return NextResponse.json({ error: "Failed to initialize storage bucket" }, { status: 500 });
-    }
+    return NextResponse.json({ error: "Failed to initialize storage bucket" }, { status: 500 });
   }
 
   let file: File;

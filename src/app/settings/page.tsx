@@ -266,6 +266,7 @@ export default function SettingsPage({
             </Card>
           </>
         ) : (
+          <>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -322,25 +323,26 @@ export default function SettingsPage({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Globe className="h-4 w-4 text-blue-600" /> Single Sign-On
-              </CardTitle>
-              <CardDescription>Configure SSO for your organization.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-                <div>
-                  <p className="text-sm font-medium">SSO via SAML / OIDC</p>
-                  <p className="text-xs text-zinc-500">Manage SSO settings in Integrations.</p>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Globe className="h-4 w-4 text-blue-600" /> Single Sign-On
+                </CardTitle>
+                <CardDescription>Configure SSO for your organization.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+                  <div>
+                    <p className="text-sm font-medium">SSO via SAML / OIDC</p>
+                    <p className="text-xs text-zinc-500">Manage SSO settings in Integrations.</p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => router.push("/admin/integrations")}>
+                    Configure
+                  </Button>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => router.push("/admin/integrations")}>
-                  Configure
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </>
         )}
       </div>
     </DashboardLayout>
