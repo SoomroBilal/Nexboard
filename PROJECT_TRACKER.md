@@ -28,6 +28,12 @@
 | T-026 | Advanced AI simulation playground packs (sales, marketing, leadership) | Medium | Agent | Core AI flows complete |
 | T-027 | Enterprise integration and security enhancements (HRMS/ATS, SSO, MFA, private deploy options) | High | Agent | Core auth and tenancy complete |
 | T-028 | Advanced analytics suite (ROI, predictive risk, impact analysis) | Medium | Agent | Core reporting complete |
+| T-030 | Connect reports pages (leadership, hr-ld, it-security) to real data instead of hardcoded mocks | High | Agent | All report pages use static mock data |
+| T-031 | Connect dashboards (leadership, it-security, mentor) to real data instead of hardcoded stats | High | Agent | Dashboards show fake metrics |
+| T-032 | Implement sidebar ?tab=X handlers for all roles (system, content, mentees, tasks, etc.) | Medium | Agent | Tabs link to pages that don't handle the parameter |
+| T-033 | Wire up or remove orphan API routes (code-review, email-simulate, document-analysis, feedback) | Medium | Agent | Routes exist but are never called from any page |
+| T-034 | Implement avatar upload and company logo upload in settings | Low | Agent | Buttons exist but have no onClick handler |
+| T-035 | Remove fake AI feedback fallback in playground, show real error instead | Low | Agent | Catch block returns deceptive hardcoded response |
 
 ## IN PROGRESS
 | ID | Task | Started | Current Step |
