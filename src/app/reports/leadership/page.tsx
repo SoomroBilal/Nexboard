@@ -2,7 +2,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, DollarSign, Download } from "lucide-react";
+import { DollarSign, Download } from "lucide-react";
 
 export default function LeadershipReportsPage() {
   return (

@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 function Avatar({
   className,
@@ -19,10 +20,15 @@ function AvatarImage({
   className,
   ...props
 }: React.ImgHTMLAttributes<HTMLImageElement>) {
+  if (!props.src || typeof props.src !== "string") return null;
+
   return (
-    <img
-      className={cn("aspect-square h-full w-full", className)}
-      {...props}
+    <Image
+      src={props.src}
+      alt={props.alt || ""}
+      fill
+      sizes="40px"
+      className={cn("aspect-square h-full w-full object-cover", className)}
     />
   );
 }

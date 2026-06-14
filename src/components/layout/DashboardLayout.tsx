@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Sidebar } from "./Sidebar";
 import { Navbar } from "./Navbar";
 import { AuthGuard } from "@/components/auth/AuthGuard";
+import { ProductTour } from "@/components/tour/ProductTour";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/types";
 
@@ -20,6 +21,9 @@ export function DashboardLayout({
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [companyName, setCompanyName] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
+  const [profileData, setProfileData] = useState<Record<string, unknown>>({});
+  const [tourOpen, setTourOpen] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -28,15 +32,29 @@ export function DashboardLayout({
         data: { user },
       } = await supabase.auth.getUser();
       if (user) {
+        setUserId(user.id);
         setEmail(user.email ?? "");
         const { data: profile } = await supabase
           .from("profiles")
-          .select("full_name, role, company_id")
+          .select("full_name, role, company_id, profile_data")
           .eq("id", user.id)
           .single();
         if (profile) {
           setName(profile.full_name);
           setRole(profile.role as UserRole);
+          const rawProfileData = (profile.profile_data ?? {}) as Record<string, unknown>;
+          setProfileData(rawProfileData);
+
+          const forceTour = typeof window !== "undefined" && localStorage.getItem("force_product_tour") === "1";
+          if (forceTour) {
+            localStorage.removeItem("force_product_tour");
+          }
+
+          const completed = rawProfileData.product_tour_completed === true;
+          if (!completed || forceTour) {
+            setTourOpen(true);
+          }
+
           if (profile.company_id) {
             const { data: company } = await supabase
               .from("companies")
@@ -50,6 +68,25 @@ export function DashboardLayout({
     };
     fetchProfile();
   }, []);
+
+  const handleTourComplete = async () => {
+    setTourOpen(false);
+    if (!userId) return;
+
+    const nextProfileData = {
+      ...profileData,
+      product_tour_completed: true,
+      product_tour_completed_at: new Date().toISOString(),
+    };
+
+    setProfileData(nextProfileData);
+
+    await fetch(`/api/users/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profile_data: nextProfileData }),
+    });
+  };
 
   return (
     <AuthGuard allowedRoles={allowedRoles}>
@@ -76,6 +113,12 @@ export function DashboardLayout({
           />
           <main className="flex-1 overflow-y-auto p-6">{children}</main>
         </div>
+        <ProductTour
+          role={role}
+          open={tourOpen}
+          onClose={() => setTourOpen(false)}
+          onComplete={handleTourComplete}
+        />
       </div>
     </AuthGuard>
   );

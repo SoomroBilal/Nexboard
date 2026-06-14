@@ -2,7 +2,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Shield, Server, AlertTriangle, Download, CheckCircle, Clock } from "lucide-react";
+import { Shield, Server, Download, CheckCircle, Clock } from "lucide-react";
 
 export default function ITSecurityReportsPage() {
   return (

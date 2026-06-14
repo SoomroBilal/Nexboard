@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { buildRateLimitKey, checkRateLimit } from "@/lib/rate-limit";
 
 const DEFAULT_TASKS: Record<string, Array<{ title: string; description: string }>> = {
   new_hire: [
@@ -66,7 +68,30 @@ function parseGeneratedTasks(text: string): Array<{ title: string; description: 
 
 export async function POST(request: Request) {
   try {
-    const { role, count = 5 } = await request.json();
+    const rate = checkRateLimit({ key: buildRateLimitKey(request, "hf:generate-tasks") });
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded. Please try again shortly." },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(rate.retryAfterSeconds),
+            "X-RateLimit-Limit": String(rate.limit),
+            "X-RateLimit-Remaining": String(rate.remaining),
+          },
+        }
+      );
+    }
+
+    const {
+      role,
+      count = 5,
+      skillLevel = "beginner",
+      programName,
+      companyContext,
+      persist = false,
+      assignToUserId,
+    } = await request.json();
 
     if (!role) {
       return NextResponse.json({ error: "Role is required" }, { status: 400 });
@@ -78,7 +103,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ tasks: fallback });
     }
 
-    const prompt = `Generate ${count} specific onboarding tasks for a ${role} employee. Format each task EXACTLY like this:
+    const prompt = `Generate ${count} specific onboarding tasks.
+
+Role: ${role}
+Skill level: ${skillLevel}
+Program: ${programName || "General Onboarding"}
+Company context: ${companyContext || "Standard company onboarding"}
+
+Format each task EXACTLY like this:
 
 Task: [short task title]
 Description: [1-2 sentence description]
@@ -120,7 +152,48 @@ Generate ${count} tasks following that exact format. Use only plain text.`;
         tasks = tasks.slice(0, count);
       }
 
-      return NextResponse.json({ tasks });
+      if (!persist) {
+        return NextResponse.json({ tasks });
+      }
+
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        return NextResponse.json({ tasks, persisted: 0, warning: "Not authenticated" });
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("id", user.id)
+        .single();
+
+      if (!profile?.company_id) {
+        return NextResponse.json({ tasks, persisted: 0, warning: "No company found" });
+      }
+
+      const rows = tasks.map((t) => ({
+        company_id: profile.company_id,
+        title: t.title,
+        description: t.description,
+        assigned_to_user_id: assignToUserId || null,
+        assigned_by_user_id: user.id,
+        status: "pending",
+      }));
+
+      const { data: inserted, error: insertError } = await supabase
+        .from("tasks")
+        .insert(rows)
+        .select("id, title");
+
+      if (insertError) {
+        return NextResponse.json({ tasks, persisted: 0, warning: insertError.message });
+      }
+
+      return NextResponse.json({ tasks, persisted: inserted?.length ?? 0, inserted: inserted ?? [] });
     } catch {
       const fallback = (DEFAULT_TASKS[role as string] ?? DEFAULT_TASKS.new_hire).slice(0, count);
       return NextResponse.json({ tasks: fallback });

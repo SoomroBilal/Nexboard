@@ -52,6 +52,8 @@ const roleMenuItems: Record<UserRole, { label: string; href: string; icon: React
   ],
   mentor: [
     { label: "Dashboard", href: "/dashboard/mentor", icon: LayoutDashboard },
+    { label: "Review Queue", href: "/dashboard/mentor/reviews", icon: MessageSquare },
+    { label: "Communication", href: "/dashboard/mentor/communication", icon: MessageSquare },
     { label: "My Mentees", href: "/dashboard/mentor?tab=mentees", icon: Users },
     { label: "Tasks", href: "/dashboard/mentor?tab=tasks", icon: FileText },
     { label: "Feedback", href: "/dashboard/mentor?tab=feedback", icon: MessageSquare },
@@ -60,11 +62,12 @@ const roleMenuItems: Record<UserRole, { label: string; href: string; icon: React
   ],
   new_hire: [
     { label: "Dashboard", href: "/dashboard/new-hire", icon: LayoutDashboard },
+    { label: "Task Submissions", href: "/dashboard/new-hire/tasks", icon: FileText },
+    { label: "Communication", href: "/dashboard/new-hire/communication", icon: MessageSquare },
     { label: "Learning Paths", href: "/dashboard/new-hire?tab=learning-paths", icon: BookOpen },
     { label: "Playgrounds", href: "/playgrounds", icon: Gamepad2 },
     { label: "Knowledge Base", href: "/knowledge-base", icon: BrainCircuit },
     { label: "Progress", href: "/dashboard/new-hire?tab=progress", icon: BarChart3 },
-    { label: "Messages", href: "/dashboard/new-hire?tab=messages", icon: MessageSquare },
     { label: "Settings", href: "/settings", icon: Settings },
   ],
   leadership: [

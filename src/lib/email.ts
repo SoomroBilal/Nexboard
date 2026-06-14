@@ -1,7 +1,5 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 export async function sendInviteEmail({
   email,
   token,
@@ -13,11 +11,20 @@ export async function sendInviteEmail({
   invitedByName: string;
   companyName: string;
 }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const sender = process.env.RESEND_SENDER_EMAIL;
+
+  if (!apiKey || !sender) {
+    console.warn("Invite email skipped: RESEND_API_KEY or RESEND_SENDER_EMAIL is missing.");
+    return;
+  }
+
+  const resend = new Resend(apiKey);
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const inviteLink = `${appUrl}/auth/signup?invite=${token}`;
 
   const { error } = await resend.emails.send({
-    from: `Nexboard <${process.env.RESEND_SENDER_EMAIL}>`,
+    from: `Nexboard <${sender}>`,
     to: email,
     subject: `${invitedByName} invited you to ${companyName} on Nexboard`,
     html: `

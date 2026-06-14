@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { BrainCircuit } from "lucide-react";
 import Link from "next/link";
 import type { UserRole } from "@/lib/types";
 
-export default function SignUpPage() {
+function SignUpContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const inviteToken = searchParams.get("invite");
@@ -235,5 +235,29 @@ export default function SignUpPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function SignUpPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 dark:bg-zinc-900">
+          <Card className="w-full max-w-sm">
+            <CardHeader className="text-center">
+              <CardTitle>Loading...</CardTitle>
+              <CardDescription>Preparing signup</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex justify-center py-8">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-800" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      }
+    >
+      <SignUpContent />
+    </Suspense>
   );
 }

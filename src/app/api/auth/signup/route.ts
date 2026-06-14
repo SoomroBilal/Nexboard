@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ user: authData.user, company }, { status: 201 });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

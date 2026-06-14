@@ -16,6 +16,10 @@ export default async function DashboardPage() {
     .eq("id", user.id)
     .single();
 
-  const role = (profile?.role as keyof typeof DASHBOARD_ROUTES) || "new_hire";
+  const rawRole = profile?.role as string | undefined;
+  const role = rawRole && rawRole in DASHBOARD_ROUTES
+    ? (rawRole as keyof typeof DASHBOARD_ROUTES)
+    : "new_hire";
+
   redirect(DASHBOARD_ROUTES[role]);
 }

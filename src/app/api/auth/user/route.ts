@@ -17,7 +17,7 @@ export async function GET() {
       .single();
 
     return NextResponse.json({ user, profile });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

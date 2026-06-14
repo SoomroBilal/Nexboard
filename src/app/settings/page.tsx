@@ -7,9 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { User, Building2, Save, Check } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [tab, setTab] = useState<"profile" | "company">("profile");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -23,10 +25,9 @@ export default function SettingsPage() {
   const [profileId, setProfileId] = useState<string | null>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
 
-  const supabase = createClient();
-
   useEffect(() => {
     const fetchSettings = async () => {
+      const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
@@ -66,6 +67,8 @@ export default function SettingsPage() {
     if (!profileId) return;
     setSaving(true);
 
+    const supabase = createClient();
+
     const { error } = await supabase
       .from("profiles")
       .update({ full_name: fullName })
@@ -82,6 +85,8 @@ export default function SettingsPage() {
     if (!companyId) return;
     setSaving(true);
 
+    const supabase = createClient();
+
     const { error } = await supabase
       .from("companies")
       .update({
@@ -96,6 +101,14 @@ export default function SettingsPage() {
       setTimeout(() => setSaved(false), 2000);
     }
     setSaving(false);
+  };
+
+  const handleReplayTour = () => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("force_product_tour", "1");
+    }
+    router.push("/dashboard");
+    router.refresh();
   };
 
   if (loading) {
@@ -166,6 +179,9 @@ export default function SettingsPage() {
                 </div>
                 <Button className="gap-2" onClick={handleProfileSave} disabled={saving}>
                   {saved ? <><Check className="h-4 w-4" /> Saved</> : <><Save className="h-4 w-4" /> Save Changes</>}
+                </Button>
+                <Button type="button" variant="outline" onClick={handleReplayTour}>
+                  Replay Product Tour
                 </Button>
               </CardContent>
             </Card>

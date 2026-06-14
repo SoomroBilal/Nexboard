@@ -1,16 +1,28 @@
 import { NextResponse } from "next/server";
+import { buildRateLimitKey, checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   try {
+    const rate = checkRateLimit({ key: buildRateLimitKey(request, "hf:document-analysis") });
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded. Please try again shortly." },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(rate.retryAfterSeconds),
+            "X-RateLimit-Limit": String(rate.limit),
+            "X-RateLimit-Remaining": String(rate.remaining),
+          },
+        }
+      );
+    }
+
     const { document, question } = await request.json();
 
     if (!document) {
       return NextResponse.json({ error: "Document content is required" }, { status: 400 });
     }
-
-    const prompt = question
-      ? `Based on the following document, answer this question: ${question}\n\nDocument: ${document}`
-      : `Summarize the following document:\n\n${document}`;
 
     const apiToken = process.env.HUGGING_FACE_API_TOKEN;
     if (!apiToken) {
@@ -44,7 +56,7 @@ export async function POST(request: Request) {
 
     const result = await response.json();
     return NextResponse.json({ analysis: result });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

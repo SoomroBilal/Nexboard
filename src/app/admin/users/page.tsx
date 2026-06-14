@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
-import { Search, MoreHorizontal, Mail, UserPlus, Shield, Pencil, Link, Copy, Check } from "lucide-react";
+import { Search, MoreHorizontal, Mail, UserPlus, Shield, Pencil, Link, Copy, Check, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile, Invite, UserRole } from "@/lib/types";
@@ -44,6 +44,10 @@ export default function AdminUsersPage() {
   const [lastInviteToken, setLastInviteToken] = useState<string | null>(null);
   const [lastInviteEmail, setLastInviteEmail] = useState("");
   const [copiedIndex, setCopiedIndex] = useState<string | null>(null);
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
+  const [bulkRole, setBulkRole] = useState<UserRole>("new_hire");
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [inviteActionLoadingId, setInviteActionLoadingId] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -203,6 +207,72 @@ export default function AdminUsersPage() {
     }
   };
 
+  const handleBulkRoleUpdate = async () => {
+    if (selectedUserIds.size === 0) return;
+    setBulkUpdating(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/users/bulk-role", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userIds: Array.from(selectedUserIds), role: bulkRole }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error || "Failed to update roles");
+      } else {
+        setSelectedUserIds(new Set());
+        await refreshData();
+      }
+    } catch {
+      setError("Failed to update roles");
+    }
+
+    setBulkUpdating(false);
+  };
+
+  const handleResendInvite = async (inviteId: string) => {
+    setInviteActionLoadingId(inviteId);
+    setError(null);
+    try {
+      const response = await fetch("/api/invites/resend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteId }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        setError(data.error || "Failed to resend invite");
+      }
+    } catch {
+      setError("Failed to resend invite");
+    }
+    setInviteActionLoadingId(null);
+  };
+
+  const handleRevokeInvite = async (inviteId: string) => {
+    setInviteActionLoadingId(inviteId);
+    setError(null);
+    try {
+      const response = await fetch("/api/invites/revoke", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteId }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        setError(data.error || "Failed to revoke invite");
+      } else {
+        await refreshData();
+      }
+    } catch {
+      setError("Failed to revoke invite");
+    }
+    setInviteActionLoadingId(null);
+  };
+
   const copyToClipboard = async (token: string, id: string) => {
     const link = getInviteLink(token);
     await navigator.clipboard.writeText(link);
@@ -255,6 +325,32 @@ export default function AdminUsersPage() {
 
         {tab === "users" ? (
           <>
+            <div className="flex flex-col gap-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800 md:flex-row md:items-center md:justify-between">
+              <div className="text-sm text-zinc-500">
+                {selectedUserIds.size > 0
+                  ? `${selectedUserIds.size} selected`
+                  : "Select users to apply bulk role updates"}
+              </div>
+              <div className="flex gap-2">
+                <select
+                  value={bulkRole}
+                  onChange={(e) => setBulkRole(e.target.value as UserRole)}
+                  className="h-9 rounded-md border border-zinc-200 bg-transparent px-2 text-sm dark:border-zinc-800"
+                >
+                  {roleOptions.map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
+                <Button
+                  variant="outline"
+                  onClick={handleBulkRoleUpdate}
+                  disabled={selectedUserIds.size === 0 || bulkUpdating}
+                >
+                  {bulkUpdating ? "Updating..." : "Apply Role"}
+                </Button>
+              </div>
+            </div>
+
             <div className="relative max-w-sm">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
               <Input placeholder="Search users..." className="pl-9" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
@@ -270,6 +366,19 @@ export default function AdminUsersPage() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-zinc-200 dark:border-zinc-800">
+                        <th className="px-4 py-3 text-left text-sm font-medium text-zinc-500">
+                          <input
+                            type="checkbox"
+                            checked={filteredProfiles.length > 0 && filteredProfiles.every((p) => selectedUserIds.has(p.id))}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedUserIds(new Set(filteredProfiles.map((p) => p.id)));
+                              } else {
+                                setSelectedUserIds(new Set());
+                              }
+                            }}
+                          />
+                        </th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-zinc-500">Name</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-zinc-500">Email</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-zinc-500">Role</th>
@@ -279,11 +388,25 @@ export default function AdminUsersPage() {
                     <tbody>
                       {filteredProfiles.length === 0 ? (
                         <tr>
-                          <td colSpan={4} className="px-4 py-12 text-center text-sm text-zinc-400">No users found.</td>
+                          <td colSpan={5} className="px-4 py-12 text-center text-sm text-zinc-400">No users found.</td>
                         </tr>
                       ) : (
                         filteredProfiles.map((p) => (
                           <tr key={p.id} className="border-b border-zinc-100 dark:border-zinc-800">
+                            <td className="px-4 py-3">
+                              <input
+                                type="checkbox"
+                                checked={selectedUserIds.has(p.id)}
+                                onChange={(e) => {
+                                  setSelectedUserIds((prev) => {
+                                    const next = new Set(prev);
+                                    if (e.target.checked) next.add(p.id);
+                                    else next.delete(p.id);
+                                    return next;
+                                  });
+                                }}
+                              />
+                            </td>
                             <td className="px-4 py-3 text-sm font-medium">{p.full_name}</td>
                             <td className="px-4 py-3 text-sm text-zinc-500">{p.email}</td>
                             <td className="px-4 py-3">
@@ -346,6 +469,17 @@ export default function AdminUsersPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0 ml-3">
+                          {!inv.accepted && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="gap-1 text-xs"
+                              onClick={() => handleResendInvite(inv.id)}
+                              disabled={inviteActionLoadingId === inv.id}
+                            >
+                              <RotateCcw className="h-3 w-3" /> Resend
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -354,6 +488,17 @@ export default function AdminUsersPage() {
                           >
                             {copiedIndex === inv.id ? <><Check className="h-3 w-3" /> Copied</> : <><Copy className="h-3 w-3" /> Copy Link</>}
                           </Button>
+                          {!inv.accepted && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="gap-1 text-xs text-red-600"
+                              onClick={() => handleRevokeInvite(inv.id)}
+                              disabled={inviteActionLoadingId === inv.id}
+                            >
+                              <Trash2 className="h-3 w-3" /> Revoke
+                            </Button>
+                          )}
                           <Badge variant={inv.accepted ? "success" : "warning"}>
                             {inv.accepted ? "Accepted" : "Pending"}
                           </Badge>

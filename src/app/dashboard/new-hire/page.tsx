@@ -34,16 +34,40 @@ async function getDashboardData() {
 
   const { data: metrics } = await supabase
     .from("performance_metrics")
-    .select("score")
+    .select("score, timestamp")
     .eq("user_id", user.id)
     .order("timestamp", { ascending: false })
-    .limit(1);
+    .limit(6);
 
   const aiScore = metrics?.[0]?.score ?? 82;
+  const trendPoints = (metrics ?? []).slice(0, 4).reverse();
+  const readinessTrend = trendPoints.map((m) => Number(m.score));
+  const trendDirection = readinessTrend.length >= 2
+    ? readinessTrend[readinessTrend.length - 1] - readinessTrend[0]
+    : 0;
 
   const activeTasks = tasks?.filter(t => t.status !== "completed").slice(0, 5) ?? [];
+  const nextBestTask = activeTasks[0] ?? null;
+  const blockers = activeTasks.filter((t) => {
+    if (!t.due_date) return false;
+    return new Date(t.due_date).getTime() < Date.now() && t.status !== "completed";
+  });
 
-  return { user, profile, tasks, totalTasks, completedTasks, skillReadiness, playgroundCount: playgroundCount ?? 0, aiScore, activeTasks };
+  return {
+    user,
+    profile,
+    tasks,
+    totalTasks,
+    completedTasks,
+    skillReadiness,
+    playgroundCount: playgroundCount ?? 0,
+    aiScore,
+    activeTasks,
+    nextBestTask,
+    blockers,
+    readinessTrend,
+    trendDirection,
+  };
 }
 
 export default async function NewHireDashboard() {
@@ -56,6 +80,16 @@ export default async function NewHireDashboard() {
         <div>
           <h1 className="text-2xl font-bold">Welcome{data.profile ? `, ${data.profile.full_name}` : ""}</h1>
           <p className="text-zinc-500">Your personalized onboarding journey starts here.</p>
+          <div className="mt-3">
+            <div className="flex gap-2">
+              <Link href="/dashboard/new-hire/tasks">
+                <Button size="sm">Open Task Submission Workflow</Button>
+              </Link>
+              <Link href="/dashboard/new-hire/communication">
+                <Button size="sm" variant="outline">Open Communication Panel</Button>
+              </Link>
+            </div>
+          </div>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -80,6 +114,73 @@ export default async function NewHireDashboard() {
               </Card>
             );
           })}
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Automation Recommendation</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {data.nextBestTask ? (
+              <div className="flex items-center justify-between rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+                <div>
+                  <p className="text-sm font-medium">Next Best Task: {data.nextBestTask.title}</p>
+                  <p className="text-xs text-zinc-500">
+                    {data.nextBestTask.description || "Generated based on your role and onboarding progress."}
+                  </p>
+                </div>
+                <Badge variant="warning">Recommended</Badge>
+              </div>
+            ) : (
+              <p className="text-sm text-zinc-400">No recommendation yet. Complete current tasks to get personalized suggestions.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Readiness Trend</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {data.readinessTrend.length === 0 ? (
+                <p className="text-sm text-zinc-400">No trend data yet. Complete assessments to see your progression.</p>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-end gap-1 h-24">
+                    {data.readinessTrend.map((point, i) => (
+                      <div key={i} className="flex-1 rounded-t bg-purple-500/80" style={{ height: `${Math.max(12, point)}%` }} />
+                    ))}
+                  </div>
+                  <p className="text-sm text-zinc-500">
+                    {data.trendDirection >= 0 ? "Improving" : "Needs attention"} trend ({data.trendDirection >= 0 ? "+" : ""}{data.trendDirection} points)
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Blockers</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {data.blockers.length === 0 ? (
+                  <p className="text-sm text-zinc-400">No blockers detected. You&apos;re on track.</p>
+              ) : (
+                <div className="space-y-2">
+                  {data.blockers.map((task) => (
+                    <div key={task.id} className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/40">
+                      <p className="text-sm font-medium text-red-700 dark:text-red-300">{task.title}</p>
+                      <p className="text-xs text-red-600/80 dark:text-red-300/80">
+                        Overdue since {task.due_date ? new Date(task.due_date).toLocaleDateString() : "unknown"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         <Card>

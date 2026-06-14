@@ -1,8 +1,10 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Users, BarChart3, MessageSquare, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import Link from "next/link";
 
 async function getMentorData() {
   const supabase = await createClient();
@@ -74,6 +76,16 @@ export default async function MentorDashboard() {
         <div>
           <h1 className="text-2xl font-bold">Mentor Dashboard</h1>
           <p className="text-zinc-500">Track your mentees&apos; progress and provide feedback.</p>
+          <div className="mt-3">
+            <div className="flex gap-2">
+              <Link href="/dashboard/mentor/reviews">
+                <Button size="sm">Open Review Queue</Button>
+              </Link>
+              <Link href="/dashboard/mentor/communication">
+                <Button size="sm" variant="outline">Open Communication Panel</Button>
+              </Link>
+            </div>
+          </div>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

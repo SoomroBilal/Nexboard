@@ -1,7 +1,25 @@
 import { NextResponse } from "next/server";
+import { buildRateLimitKey, checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   try {
+    const rate = checkRateLimit({
+      key: buildRateLimitKey(request, "hf:chat"),
+    });
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded. Please try again shortly." },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(rate.retryAfterSeconds),
+            "X-RateLimit-Limit": String(rate.limit),
+            "X-RateLimit-Remaining": String(rate.remaining),
+          },
+        }
+      );
+    }
+
     const { prompt, model } = await request.json();
 
     if (!prompt) {
@@ -42,7 +60,7 @@ export async function POST(request: Request) {
 
     const result = await response.json();
     return NextResponse.json({ result });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

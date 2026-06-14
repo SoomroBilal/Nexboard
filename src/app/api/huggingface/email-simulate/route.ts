@@ -1,7 +1,23 @@
 import { NextResponse } from "next/server";
+import { buildRateLimitKey, checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   try {
+    const rate = checkRateLimit({ key: buildRateLimitKey(request, "hf:email-simulate") });
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded. Please try again shortly." },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(rate.retryAfterSeconds),
+            "X-RateLimit-Limit": String(rate.limit),
+            "X-RateLimit-Remaining": String(rate.remaining),
+          },
+        }
+      );
+    }
+
     const { scenario, userResponse } = await request.json();
 
     const prompt = `Simulate an email conversation. Context: ${scenario || "client onboarding meeting follow-up"}. The user responded with: "${userResponse}". Generate a realistic reply from the client, including potential objections or concerns.`;
@@ -38,7 +54,7 @@ export async function POST(request: Request) {
 
     const result = await response.json();
     return NextResponse.json({ reply: result });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Search, BrainCircuit, FileText, Send } from "lucide-react";
+import { Search, BrainCircuit, FileText, Send, Upload } from "lucide-react";
 import type { Document } from "@/lib/types";
 
 export default function KnowledgeBasePage() {
@@ -17,11 +17,13 @@ export default function KnowledgeBasePage() {
   const [aiMessages, setAiMessages] = useState<{ role: "user" | "ai"; content: string }[]>([]);
   const [aiInput, setAiInput] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
-
-  const supabase = createClient();
+  const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadContent, setUploadContent] = useState("");
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     const fetchDocs = async () => {
+      const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
@@ -53,10 +55,25 @@ export default function KnowledgeBasePage() {
     setAiLoading(true);
 
     try {
+      const kbContextResponse = await fetch("/api/knowledge-base/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: userMessage }),
+      });
+
+      const kbData = kbContextResponse.ok ? await kbContextResponse.json() : { results: [] };
+      const context = (kbData.results ?? [])
+        .map((r: { title: string; excerpt: string }) => `Source: ${r.title}\nExcerpt: ${r.excerpt}`)
+        .join("\n\n");
+
       const response = await fetch("/api/huggingface/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: userMessage }),
+        body: JSON.stringify({
+          prompt: context
+            ? `Use the company knowledge context to answer the user question.\n\nContext:\n${context}\n\nQuestion: ${userMessage}`
+            : userMessage,
+        }),
       });
 
       if (!response.ok) throw new Error("Failed to get AI response");
@@ -75,6 +92,40 @@ export default function KnowledgeBasePage() {
       ]);
     }
     setAiLoading(false);
+  };
+
+  const handleUpload = async () => {
+    if (!uploadTitle.trim() || !uploadContent.trim()) return;
+    setUploading(true);
+    try {
+      const response = await fetch("/api/knowledge-base/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: uploadTitle, content: uploadContent }),
+      });
+
+      if (!response.ok) throw new Error("Failed to upload");
+
+      const { document } = await response.json();
+      setDocuments((prev) => [
+        {
+          id: document.id,
+          title: uploadTitle,
+          content: uploadContent,
+          company_id: "",
+          uploaded_by_user_id: "",
+          access_permissions: {},
+          created_at: document.created_at,
+          updated_at: document.created_at,
+        },
+        ...prev,
+      ]);
+      setUploadTitle("");
+      setUploadContent("");
+    } catch {
+      // no-op for now
+    }
+    setUploading(false);
   };
 
   const filteredDocs = query
@@ -109,6 +160,29 @@ export default function KnowledgeBasePage() {
 
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Upload to Knowledge Base</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Input
+                  placeholder="Document title"
+                  value={uploadTitle}
+                  onChange={(e) => setUploadTitle(e.target.value)}
+                />
+                <textarea
+                  className="min-h-[120px] w-full rounded-md border border-zinc-200 bg-transparent px-3 py-2 text-sm dark:border-zinc-800"
+                  placeholder="Paste document content here..."
+                  value={uploadContent}
+                  onChange={(e) => setUploadContent(e.target.value)}
+                />
+                <Button onClick={handleUpload} disabled={uploading || !uploadTitle.trim() || !uploadContent.trim()} className="gap-2">
+                  <Upload className="h-4 w-4" />
+                  {uploading ? "Uploading..." : "Ingest Document"}
+                </Button>
+              </CardContent>
+            </Card>
+
             {categoryCounts.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {categoryCounts.map((cat) => (

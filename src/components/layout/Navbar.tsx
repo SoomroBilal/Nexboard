@@ -4,8 +4,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Menu, LogOut, User } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Menu, LogOut } from "lucide-react";
 
 export function Navbar({
   userEmail,

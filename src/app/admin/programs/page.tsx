@@ -118,7 +118,6 @@ export default function AdminProgramsPage() {
     setEditingProgram(null);
     setFormName("");
     setFormDescription("");
-    setFormTargetRole("new_hire");
     setError(null);
     setModalOpen(true);
   };
@@ -369,11 +368,11 @@ export default function AdminProgramsPage() {
   return (
     <DashboardLayout allowedRoles={["company_admin", "hr", "super_admin"]}>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Onboarding Programs</h1>
-            <p className="text-zinc-500">Create structured onboarding programs with AI-generated tasks and milestones.</p>
-          </div>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Onboarding Programs</h1>
+          <p className="text-zinc-500">Create structured onboarding programs with AI-generated tasks and milestones.</p>
+        </div>
           <div className="flex gap-2">
             <Button variant="outline" className="gap-2" onClick={openAiModal}>
               <Sparkles className="h-4 w-4" /> Generate with AI
@@ -383,6 +382,46 @@ export default function AdminProgramsPage() {
             </Button>
           </div>
         </div>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-end">
+              <div className="flex-1 space-y-2">
+                <label className="text-sm font-medium">Automation: generate and persist onboarding tasks</label>
+                <p className="text-xs text-zinc-500">
+                  Generates role-aware tasks and writes them directly to your company task board.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  setGenerating(true);
+                  try {
+                    await fetch("/api/huggingface/generate-tasks", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        role: "new_hire",
+                        count: 5,
+                        skillLevel: "beginner",
+                        programName: "General Onboarding",
+                        companyContext: "Standard company onboarding checklist",
+                        persist: true,
+                      }),
+                    });
+                  } finally {
+                    setGenerating(false);
+                  }
+                }}
+                disabled={generating}
+                className="gap-2"
+              >
+                {generating ? <Loader className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {generating ? "Generating..." : "Auto-Generate Tasks"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
