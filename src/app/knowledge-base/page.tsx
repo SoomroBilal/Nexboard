@@ -8,18 +8,43 @@ import { Badge } from "@/components/ui/badge";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Search, BrainCircuit, FileText, Send, Upload } from "lucide-react";
-import type { Document } from "@/lib/types";
+import type { Document, UserRole } from "@/lib/types";
+
+function Markdown({ children }: { children: string }) {
+  const parts = children.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (part.startsWith("**") && part.endsWith("**")) {
+          return <strong key={i}>{part.slice(2, -2)}</strong>;
+        }
+        if (part.startsWith("*") && part.endsWith("*")) {
+          return <em key={i}>{part.slice(1, -1)}</em>;
+        }
+        return part.split("\n").map((line, j) => (
+          <span key={`${i}-${j}`}>
+            {j > 0 && <br />}
+            {line}
+          </span>
+        ));
+      })}
+    </>
+  );
+}
 
 export default function KnowledgeBasePage() {
   const [query, setQuery] = useState("");
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [aiMessages, setAiMessages] = useState<{ role: "user" | "ai"; content: string }[]>([]);
   const [aiInput, setAiInput] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [uploadTitle, setUploadTitle] = useState("");
   const [uploadContent, setUploadContent] = useState("");
   const [uploading, setUploading] = useState(false);
+
+  const canManage = userRole === "company_admin" || userRole === "super_admin";
 
   useEffect(() => {
     const fetchDocs = async () => {
@@ -29,11 +54,12 @@ export default function KnowledgeBasePage() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("company_id")
+        .select("company_id, role")
         .eq("id", user.id)
         .single();
 
       if (profile?.company_id) {
+        setUserRole(profile.role as UserRole);
         const { data: docs } = await supabase
           .from("documents")
           .select("*")
@@ -62,17 +88,26 @@ export default function KnowledgeBasePage() {
       });
 
       const kbData = kbContextResponse.ok ? await kbContextResponse.json() : { results: [] };
-      const context = (kbData.results ?? [])
-        .map((r: { title: string; excerpt: string }) => `Source: ${r.title}\nExcerpt: ${r.excerpt}`)
-        .join("\n\n");
+      const results = kbData.results ?? [];
+
+      if (results.length === 0) {
+        setAiMessages((prev) => [
+          ...prev,
+          { role: "ai", content: "I don't have information about that in the company knowledge base." },
+        ]);
+        setAiLoading(false);
+        return;
+      }
+
+      const context = results
+        .map((r: { title: string; excerpt: string }) => `From: ${r.title}\n${r.excerpt}`)
+        .join("\n\n---\n\n");
 
       const response = await fetch("/api/huggingface/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: context
-            ? `Use the company knowledge context to answer the user question.\n\nContext:\n${context}\n\nQuestion: ${userMessage}`
-            : userMessage,
+          prompt: `You are a company knowledge base assistant. Answer the question using the context below. If the context is completely unrelated to the question, say "I don't have information about that in the company knowledge base."\n\nContext:\n${context}\n\nQuestion: ${userMessage}`,
         }),
       });
 
@@ -84,11 +119,7 @@ export default function KnowledgeBasePage() {
     } catch {
       setAiMessages((prev) => [
         ...prev,
-        {
-          role: "ai",
-          content:
-            "Based on the company documents I have access to, here's what I found. The relevant policy is covered in the Employee Handbook under Section 3.2.",
-        },
+        { role: "ai", content: "API error. Please try again later." },
       ]);
     }
     setAiLoading(false);
@@ -140,155 +171,215 @@ export default function KnowledgeBasePage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">Knowledge Base</h1>
-          <p className="text-zinc-500">
-            Search company documents and ask the AI assistant for help.
-          </p>
-        </div>
+      {canManage ? (
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold">Knowledge Base</h1>
+            <p className="text-zinc-500">
+              Search company documents and ask the AI assistant for help.
+            </p>
+          </div>
 
-        <div className="relative max-w-xl">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-          <Input
-            placeholder="Search the knowledge base..."
-            className="pl-9"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
+          <div className="relative max-w-xl">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+            <Input
+              placeholder="Search the knowledge base..."
+              className="pl-9"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2 space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Upload to Knowledge Base</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Input
-                  placeholder="Document title"
-                  value={uploadTitle}
-                  onChange={(e) => setUploadTitle(e.target.value)}
-                />
-                <textarea
-                  className="min-h-[120px] w-full rounded-md border border-zinc-200 bg-transparent px-3 py-2 text-sm dark:border-zinc-800"
-                  placeholder="Paste document content here..."
-                  value={uploadContent}
-                  onChange={(e) => setUploadContent(e.target.value)}
-                />
-                <Button onClick={handleUpload} disabled={uploading || !uploadTitle.trim() || !uploadContent.trim()} className="gap-2">
-                  <Upload className="h-4 w-4" />
-                  {uploading ? "Uploading..." : "Ingest Document"}
-                </Button>
-              </CardContent>
-            </Card>
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-2 space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Upload to Knowledge Base</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Input
+                    placeholder="Document title"
+                    value={uploadTitle}
+                    onChange={(e) => setUploadTitle(e.target.value)}
+                  />
+                  <textarea
+                    className="min-h-[120px] w-full rounded-md border border-zinc-200 bg-transparent px-3 py-2 text-sm dark:border-zinc-800"
+                    placeholder="Paste document content here..."
+                    value={uploadContent}
+                    onChange={(e) => setUploadContent(e.target.value)}
+                  />
+                  <Button onClick={handleUpload} disabled={uploading || !uploadTitle.trim() || !uploadContent.trim()} className="gap-2">
+                    <Upload className="h-4 w-4" />
+                    {uploading ? "Uploading..." : "Ingest Document"}
+                  </Button>
+                </CardContent>
+              </Card>
 
-            {categoryCounts.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {categoryCounts.map((cat) => (
-                  <Badge key={cat.name} variant="secondary" className="cursor-pointer">
-                    {cat.name} ({cat.count})
-                  </Badge>
-                ))}
-              </div>
-            )}
+              {categoryCounts.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {categoryCounts.map((cat) => (
+                    <Badge key={cat.name} variant="secondary" className="cursor-pointer">
+                      {cat.name} ({cat.count})
+                    </Badge>
+                  ))}
+                </div>
+              )}
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  {loading ? "Loading..." : `${documents.length} Documents`}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {loading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-800" />
-                  </div>
-                ) : filteredDocs.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-zinc-400">
-                    {query ? "No documents match your search." : "No documents available yet."}
-                  </p>
-                ) : (
-                  filteredDocs.map((doc) => (
-                    <div
-                      key={doc.id}
-                      className="flex cursor-pointer items-center justify-between rounded-lg border border-zinc-200 p-3 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
-                    >
-                      <div className="flex items-center gap-3">
-                        <FileText className="h-4 w-4 text-purple-600" />
-                        <div>
-                          <p className="text-sm font-medium">{doc.title}</p>
-                          <p className="text-xs text-zinc-500">
-                            {new Date(doc.updated_at).toLocaleDateString()}
-                          </p>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    {loading ? "Loading..." : `${documents.length} Documents`}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {loading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-800" />
+                    </div>
+                  ) : filteredDocs.length === 0 ? (
+                    <p className="py-8 text-center text-sm text-zinc-400">
+                      {query ? "No documents match your search." : "No documents available yet."}
+                    </p>
+                  ) : (
+                    filteredDocs.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="flex cursor-pointer items-center justify-between rounded-lg border border-zinc-200 p-3 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+                      >
+                        <div className="flex items-center gap-3">
+                          <FileText className="h-4 w-4 text-purple-600" />
+                          <div>
+                            <p className="text-sm font-medium">{doc.title}</p>
+                            <p className="text-xs text-zinc-500">
+                              {new Date(doc.updated_at).toLocaleDateString()}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            </div>
 
-          <div>
-            <Card className="h-[500px] flex flex-col">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <BrainCircuit className="h-4 w-4 text-purple-600" />
-                  AI Assistant
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-1 flex-col">
-                <div className="flex-1 overflow-y-auto space-y-3 mb-3">
-                  {aiMessages.length === 0 && (
-                    <p className="text-center text-sm text-zinc-400 mt-8">
-                      Ask me anything about company policies, tasks, or resources.
-                    </p>
-                  )}
-                  {aiMessages.map((msg, i) => (
-                    <div
-                      key={i}
-                      className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                    >
+            <div>
+              <Card className="h-[500px] flex flex-col">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <BrainCircuit className="h-4 w-4 text-purple-600" />
+                    AI Assistant
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="flex min-h-0 flex-1 flex-col">
+                  <div className="min-h-0 flex-1 overflow-y-auto space-y-3 mb-3">
+                    {aiMessages.length === 0 && (
+                      <p className="text-center text-sm text-zinc-400 mt-8">
+                        Ask me anything about company policies, tasks, or resources.
+                      </p>
+                    )}
+                    {aiMessages.map((msg, i) => (
                       <div
-                        className={`max-w-[90%] rounded-lg px-3 py-2 text-sm ${
-                          msg.role === "user"
-                            ? "bg-purple-600 text-white"
-                            : "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
-                        }`}
+                        key={i}
+                        className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                       >
-                        {msg.content}
+                        <div
+                          className={`max-w-[90%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
+                            msg.role === "user"
+                              ? "bg-purple-600 text-white"
+                              : "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
+                          }`}
+                        >
+                          <Markdown>{msg.content}</Markdown>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                  {aiLoading && (
-                    <div className="flex justify-start">
-                      <div className="rounded-lg bg-zinc-100 px-3 py-2 text-sm dark:bg-zinc-800">
-                        <span className="animate-pulse">Thinking...</span>
+                    ))}
+                    {aiLoading && (
+                      <div className="flex justify-start">
+                        <div className="rounded-lg bg-zinc-100 px-3 py-2 text-sm dark:bg-zinc-800">
+                          <span className="animate-pulse">Thinking...</span>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Ask the AI assistant..."
-                    value={aiInput}
-                    onChange={(e) => setAiInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleAiAsk()}
-                  />
-                  <Button
-                    size="icon"
-                    onClick={handleAiAsk}
-                    disabled={aiLoading || !aiInput.trim()}
-                  >
-                    <Send className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Ask the AI assistant..."
+                      value={aiInput}
+                      onChange={(e) => setAiInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleAiAsk()}
+                    />
+                    <Button
+                      size="icon"
+                      onClick={handleAiAsk}
+                      disabled={aiLoading || !aiInput.trim()}
+                    >
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="mx-auto max-w-2xl pt-8">
+          <Card className="flex flex-col" style={{ height: "70vh" }}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <BrainCircuit className="h-4 w-4 text-purple-600" />
+                AI Assistant
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex min-h-0 flex-1 flex-col">
+              <div className="min-h-0 flex-1 overflow-y-auto space-y-3 mb-3">
+                {aiMessages.length === 0 && (
+                  <p className="text-center text-sm text-zinc-400 mt-8">
+                    Ask me anything about company policies, tasks, or resources.
+                  </p>
+                )}
+                {aiMessages.map((msg, i) => (
+                  <div
+                    key={i}
+                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                  >
+                    <div
+                      className={`max-w-[90%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
+                        msg.role === "user"
+                          ? "bg-purple-600 text-white"
+                          : "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
+                      }`}
+                    >
+                      <Markdown>{msg.content}</Markdown>
+                    </div>
+                  </div>
+                ))}
+                {aiLoading && (
+                  <div className="flex justify-start">
+                    <div className="rounded-lg bg-zinc-100 px-3 py-2 text-sm dark:bg-zinc-800">
+                      <span className="animate-pulse">Thinking...</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Ask the AI assistant..."
+                  value={aiInput}
+                  onChange={(e) => setAiInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleAiAsk()}
+                />
+                <Button
+                  size="icon"
+                  onClick={handleAiAsk}
+                  disabled={aiLoading || !aiInput.trim()}
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </DashboardLayout>
   );
 }

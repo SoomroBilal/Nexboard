@@ -31,10 +31,9 @@ export const DASHBOARD_ROUTES: Record<UserRole, string> = {
 };
 
 export const HUGGING_FACE_MODELS = {
-  CHAT: "google/flan-t5-xxl",
-  TASK_GENERATION: "gpt2",
-  CODE_REVIEW: "codellama/CodeLlama-7b-hf",
-  EMAIL_SIMULATION: "facebook/blenderbot-400M-distill",
-  FEEDBACK: "bert-base-uncased",
-  DOCUMENT_ANALYSIS: "impira/layoutlm-document-qa",
+  CHAT: "meta-llama/Llama-3.1-8B-Instruct",
+  TASK_GENERATION: "meta-llama/Llama-3.1-8B-Instruct",
+  EMBEDDING: "sentence-transformers/all-MiniLM-L6-v2",
 } as const;
+
+export const HUGGING_FACE_TOKEN = process.env.HUGGING_FACE_API_TOKEN ?? "";

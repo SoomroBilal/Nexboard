@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { buildRateLimitKey, checkRateLimit } from "@/lib/rate-limit";
+import { InferenceClient } from "@huggingface/inference";
+import { HUGGING_FACE_MODELS, HUGGING_FACE_TOKEN } from "@/lib/constants";
 
 const DEFAULT_TASKS: Record<string, Array<{ title: string; description: string }>> = {
   new_hire: [
@@ -9,16 +11,55 @@ const DEFAULT_TASKS: Record<string, Array<{ title: string; description: string }
     { title: "Review employee handbook", description: "Read through the employee handbook covering company policies, code of conduct, and benefits information." },
     { title: "Schedule introductory meetings", description: "Meet with your manager, team members, and key stakeholders to understand team dynamics and expectations." },
     { title: "Complete security training", description: "Take the mandatory security awareness training covering data protection, password policies, and threat detection." },
+    { title: "Set up company email and communication tools", description: "Configure company email, Slack, and any other communication platforms with proper access and notifications." },
+    { title: "Review team documentation and project wiki", description: "Read through team-specific documentation including project architecture, coding standards, and workflow guides." },
+    { title: "Complete compliance and ethics training", description: "Review company compliance policies, data privacy regulations, and complete the mandatory ethics certification." },
+    { title: "Tour office or virtual workspace", description: "Familiarize yourself with the physical office layout or virtual workspace tools used by the team." },
+    { title: "Meet with assigned buddy or mentor", description: "Schedule a one-on-one with your assigned buddy or mentor to discuss role expectations and company culture." },
+    { title: "Review role-specific training materials", description: "Go through role-specific training modules, videos, and documentation provided by your manager." },
+    { title: "Set up payroll and benefits accounts", description: "Register for payroll portals, health benefits, retirement plans, and other employee benefit systems." },
+    { title: "Understand team OKRs and goals", description: "Review team and company objectives and key results to understand how your role contributes to broader goals." },
+    { title: "Complete first week check-in with manager", description: "Schedule a check-in with your manager at the end of the first week to discuss progress and address questions." },
+    { title: "Learn company product and service offerings", description: "Study the company's products or services to understand the value proposition and customer use cases." },
   ],
   mentor: [
     { title: "Review mentee onboarding progress", description: "Check in on assigned mentees to review their onboarding checklist completion and address any blockers." },
     { title: "Prepare mentorship plan", description: "Create a structured mentorship plan outlining goals, meeting cadence, and skill development milestones." },
+    { title: "Schedule weekly mentorship sessions", description: "Set up recurring weekly check-ins with your mentees to provide guidance and track progress." },
+    { title: "Review mentee work products", description: "Review code reviews, documentation, or other deliverables produced by your mentees and provide constructive feedback." },
+    { title: "Create skill development roadmap", description: "Design a personalized skill development roadmap for each mentee based on their role and career aspirations." },
+    { title: "Conduct mid-point mentorship review", description: "Evaluate mentee progress at the halfway point, identifying areas of improvement and adjusting the mentorship plan." },
+    { title: "Document mentorship best practices", description: "Write down effective mentorship strategies and share with other mentors in the organization." },
+    { title: "Facilitate cross-team introductions", description: "Introduce mentees to key stakeholders and team members across departments to build their professional network." },
+    { title: "Provide feedback on soft skills", description: "Observe and provide constructive feedback on communication, collaboration, and other soft skills." },
+    { title: "Prepare mentee for performance reviews", description: "Guide mentees on how to prepare for performance reviews, including self-assessments and achievement tracking." },
   ],
   hr: [
     { title: "Verify new hire documentation", description: "Review and verify all submitted onboarding documents for completeness and compliance." },
     { title: "Schedule orientation session", description: "Coordinate and schedule the new hire orientation session with relevant departments." },
+    { title: "Update employee records in HRIS", description: "Ensure all new hire information is accurately entered into the HR information system." },
+    { title: "Prepare onboarding swag and equipment", description: "Coordinate delivery of company swag, laptop, and any necessary equipment before the start date." },
+    { title: "Conduct benefits orientation", description: "Explain health insurance, retirement plans, and other benefits to new hires and assist with enrollment." },
+    { title: "Update organizational chart", description: "Update the company org chart to reflect new team members and any recent changes in reporting structure." },
+    { title: "Send new hire announcement", description: "Draft and distribute a company-wide announcement welcoming new hires with their role and background." },
+    { title: "Review and update onboarding checklist", description: "Audit the current onboarding checklist and update any outdated steps or resources." },
+    { title: "Collect feedback from recent new hires", description: "Send a feedback survey to recent new hires to identify gaps in the onboarding experience." },
+    { title: "Coordinate IT access provisioning", description: "Work with IT to ensure new hires have the appropriate system access, accounts, and permissions." },
+    { title: "Plan team building activities", description: "Organize team building events or activities to help new hires integrate with their teams." },
+    { title: "Review offboarding checklist for completeness", description: "Ensure the offboarding process is up to date for departing employees, including exit interviews." },
+    { title: "Track onboarding completion metrics", description: "Monitor and report on onboarding completion rates and time-to-productivity for new hires." },
+    { title: "Update company policy documentation", description: "Review and revise employee handbook and policy documents to reflect current practices and regulations." },
   ],
 };
+
+function shufflePick<T>(arr: T[], count: number): T[] {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.slice(0, count);
+}
 
 function parseGeneratedTasks(text: string): Array<{ title: string; description: string }> {
   const tasks: Array<{ title: string; description: string }> = [];
@@ -97,55 +138,41 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Role is required" }, { status: 400 });
     }
 
-    const apiToken = process.env.HUGGING_FACE_API_TOKEN;
+    const apiToken = HUGGING_FACE_TOKEN;
     if (!apiToken) {
-      const fallback = (DEFAULT_TASKS[role as string] ?? DEFAULT_TASKS.new_hire).slice(0, count);
+      const fallback = shufflePick(DEFAULT_TASKS[role as string] ?? DEFAULT_TASKS.new_hire, count);
       return NextResponse.json({ tasks: fallback });
     }
 
-    const prompt = `Generate ${count} specific onboarding tasks.
+    try {
+      const client = new InferenceClient(apiToken);
+      const result = await client.chatCompletion({
+        model: HUGGING_FACE_MODELS.TASK_GENERATION,
+        messages: [
+          {
+            role: "system",
+            content: `You are an onboarding task generator. Generate ${count} specific, actionable onboarding tasks for a ${role} role. Skill level: ${skillLevel}. Program: ${programName || "General Onboarding"}. Company context: ${companyContext || "Standard company onboarding"}.`,
+          },
+          {
+            role: "user",
+            content: `Generate ${count} onboarding tasks. Format each task exactly like:
 
-Role: ${role}
-Skill level: ${skillLevel}
-Program: ${programName || "General Onboarding"}
-Company context: ${companyContext || "Standard company onboarding"}
-
-Format each task EXACTLY like this:
-
-Task: [short task title]
+Task: [short title]
 Description: [1-2 sentence description]
 
-Generate ${count} tasks following that exact format. Use only plain text.`;
-
-    try {
-      const response = await fetch(
-        "https://api-inference.huggingface.co/models/google/flan-t5-xxl",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiToken}`,
-            "Content-Type": "application/json",
+Generate ${count} tasks in that format. Use only plain text.`,
           },
-          body: JSON.stringify({
-            inputs: prompt,
-            parameters: { max_new_tokens: 500, temperature: 0.7 },
-          }),
-        }
-      );
+        ],
+        max_tokens: 800,
+        temperature: 0.7,
+      });
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
-
-      const result = await response.json();
-      const generatedText = Array.isArray(result)
-        ? result.map((r: { generated_text?: string }) => r.generated_text || "").join("\n")
-        : result.generated_text || "";
+      const generatedText = result.choices?.[0]?.message?.content ?? "";
 
       let tasks = parseGeneratedTasks(generatedText);
 
       if (tasks.length === 0) {
-        tasks = (DEFAULT_TASKS[role as string] ?? DEFAULT_TASKS.new_hire).slice(0, count);
+        tasks = shufflePick(DEFAULT_TASKS[role as string] ?? DEFAULT_TASKS.new_hire, count);
       }
 
       if (tasks.length > count) {
@@ -195,7 +222,7 @@ Generate ${count} tasks following that exact format. Use only plain text.`;
 
       return NextResponse.json({ tasks, persisted: inserted?.length ?? 0, inserted: inserted ?? [] });
     } catch {
-      const fallback = (DEFAULT_TASKS[role as string] ?? DEFAULT_TASKS.new_hire).slice(0, count);
+      const fallback = shufflePick(DEFAULT_TASKS[role as string] ?? DEFAULT_TASKS.new_hire, count);
       return NextResponse.json({ tasks: fallback });
     }
   } catch {

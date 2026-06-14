@@ -43,6 +43,7 @@ export default function AdminProgramsPage() {
   const [selectedTasks, setSelectedTasks] = useState<Set<number>>(new Set());
   const [aiProgramName, setAiProgramName] = useState("");
   const [aiTargetRole, setAiTargetRole] = useState<UserRole>("new_hire");
+  const [aiPrompt, setAiPrompt] = useState("");
 
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [detailProgram, setDetailProgram] = useState<LearningPath | null>(null);
@@ -191,6 +192,7 @@ export default function AdminProgramsPage() {
   const openAiModal = () => {
     setAiProgramName("");
     setAiTargetRole("new_hire");
+    setAiPrompt("");
     setGeneratedTasks([]);
     setSelectedTasks(new Set());
     setAiModalOpen(true);
@@ -205,7 +207,7 @@ export default function AdminProgramsPage() {
       const res = await fetch("/api/huggingface/generate-tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: aiTargetRole, count: 5 }),
+        body: JSON.stringify({ role: aiTargetRole, count: 5, companyContext: aiPrompt }),
       });
 
       const data = await res.json();
@@ -525,6 +527,16 @@ export default function AdminProgramsPage() {
               <option value="hr">HR</option>
               <option value="mentor">Mentor</option>
             </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Admin Prompt (optional)</label>
+            <Textarea
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+              placeholder="Describe what kind of tasks to generate, e.g. 'Focus on AWS security training and compliance'"
+              rows={3}
+            />
           </div>
 
           <Button onClick={handleGenerate} disabled={generating} className="w-full gap-2">

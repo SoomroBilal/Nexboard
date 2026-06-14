@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { InferenceClient } from "@huggingface/inference";
+import { HUGGING_FACE_MODELS, HUGGING_FACE_TOKEN } from "@/lib/constants";
 
 interface Chunk {
   content: string;
   index: number;
   start: number;
   end: number;
+  embedding?: number[];
 }
 
-function splitIntoChunks(text: string, chunkSize = 700): Chunk[] {
+function splitIntoChunks(text: string, chunkSize = 2500): Chunk[] {
   const normalized = text.replace(/\s+/g, " ").trim();
   if (!normalized) return [];
 
@@ -48,7 +52,7 @@ export async function POST(request: Request) {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("company_id")
+      .select("company_id, role")
       .eq("id", user.id)
       .single();
 
@@ -56,7 +60,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No company found" }, { status: 400 });
     }
 
+    const allowedRoles = ["company_admin", "super_admin"];
+    if (!allowedRoles.includes(profile.role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const chunks = splitIntoChunks(content);
+
+    const apiToken = HUGGING_FACE_TOKEN;
+    if (apiToken) {
+      const client = new InferenceClient(apiToken);
+      for (const chunk of chunks) {
+        try {
+          const emb = await client.featureExtraction({
+            model: HUGGING_FACE_MODELS.EMBEDDING,
+            inputs: chunk.content,
+          });
+          chunk.embedding = (Array.isArray(emb[0]) ? emb[0] : emb) as number[];
+        } catch {
+          // continue without embedding for this chunk
+        }
+      }
+    }
 
     const accessPermissions = {
       visibility: "company",
@@ -65,7 +90,8 @@ export async function POST(request: Request) {
       indexed_at: new Date().toISOString(),
     };
 
-    const { data: doc, error } = await supabase
+    const admin = createAdminClient();
+    const { data: doc, error } = await admin
       .from("documents")
       .insert({
         title,
