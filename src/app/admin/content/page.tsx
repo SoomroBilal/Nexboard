@@ -23,10 +23,6 @@ export default function AdminContentPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchDocuments();
-  }, []);
-
   const fetchDocuments = async () => {
     setLoading(true);
     const supabase = createClient();
@@ -50,6 +46,13 @@ export default function AdminContentPage() {
     }
     setLoading(false);
   };
+
+  useEffect(() => {
+    const init = async () => {
+      await fetchDocuments();
+    };
+    init();
+  }, []);
 
   const openUploadModal = () => {
     setUploadTitle("");

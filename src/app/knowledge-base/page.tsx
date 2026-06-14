@@ -7,8 +7,21 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Search, BrainCircuit, FileText, Send, Upload } from "lucide-react";
+import { Search, BrainCircuit, FileText, Send, Upload, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import type { Document, UserRole } from "@/lib/types";
+
+interface Citation {
+  id: string;
+  title: string;
+  excerpt: string;
+  score: number;
+}
+
+interface AiMessage {
+  role: "user" | "ai";
+  content: string;
+  citations?: Citation[];
+}
 
 function Markdown({ children }: { children: string }) {
   const parts = children.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
@@ -37,7 +50,8 @@ export default function KnowledgeBasePage() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
-  const [aiMessages, setAiMessages] = useState<{ role: "user" | "ai"; content: string }[]>([]);
+  const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
+  const [expandedCitations, setExpandedCitations] = useState<number | null>(null);
   const [aiInput, setAiInput] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [uploadTitle, setUploadTitle] = useState("");
@@ -81,45 +95,23 @@ export default function KnowledgeBasePage() {
     setAiLoading(true);
 
     try {
-      const kbContextResponse = await fetch("/api/knowledge-base/search", {
+      const response = await fetch("/api/knowledge-base/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: userMessage }),
       });
 
-      const kbData = kbContextResponse.ok ? await kbContextResponse.json() : { results: [] };
-      const results = kbData.results ?? [];
-
-      if (results.length === 0) {
-        setAiMessages((prev) => [
-          ...prev,
-          { role: "ai", content: "I don't have information about that in the company knowledge base." },
-        ]);
-        setAiLoading(false);
-        return;
-      }
-
-      const context = results
-        .map((r: { title: string; excerpt: string }) => `From: ${r.title}\n${r.excerpt}`)
-        .join("\n\n---\n\n");
-
-      const response = await fetch("/api/huggingface/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: `You are a company knowledge base assistant. Answer the question using the context below. If the context is completely unrelated to the question, say "I don't have information about that in the company knowledge base."\n\nContext:\n${context}\n\nQuestion: ${userMessage}`,
-        }),
-      });
-
-      if (!response.ok) throw new Error("Failed to get AI response");
+      if (!response.ok) throw new Error("Failed to get answer");
 
       const data = await response.json();
-      const aiText = data.result?.[0]?.generated_text || "I couldn't process that request.";
-      setAiMessages((prev) => [...prev, { role: "ai", content: aiText }]);
+      setAiMessages((prev) => [
+        ...prev,
+        { role: "ai", content: data.answer, citations: data.citations ?? [] },
+      ]);
     } catch {
       setAiMessages((prev) => [
         ...prev,
-        { role: "ai", content: "API error. Please try again later." },
+        { role: "ai", content: "Something went wrong. Please try again later.", citations: [] },
       ]);
     }
     setAiLoading(false);
@@ -278,19 +270,46 @@ export default function KnowledgeBasePage() {
                       </p>
                     )}
                     {aiMessages.map((msg, i) => (
-                      <div
-                        key={i}
-                        className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                      >
-                        <div
-                          className={`max-w-[90%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
-                            msg.role === "user"
-                              ? "bg-purple-600 text-white"
-                              : "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
-                          }`}
-                        >
-                          <Markdown>{msg.content}</Markdown>
+                      <div key={i}>
+                        <div className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                          <div
+                            className={`max-w-[90%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
+                              msg.role === "user"
+                                ? "bg-purple-600 text-white"
+                                : "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
+                            }`}
+                          >
+                            <Markdown>{msg.content}</Markdown>
+                          </div>
                         </div>
+                        {msg.role === "ai" && msg.citations && msg.citations.length > 0 && (
+                          <div className="mt-1 flex justify-start">
+                            <button
+                              onClick={() => setExpandedCitations(expandedCitations === i ? null : i)}
+                              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-950"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              {msg.citations.length} source{msg.citations.length > 1 ? "s" : ""}
+                              {expandedCitations === i ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                            </button>
+                          </div>
+                        )}
+                        {msg.role === "ai" && msg.citations && msg.citations.length > 0 && expandedCitations === i && (
+                          <div className="mt-2 space-y-2">
+                            {msg.citations.map((cit) => (
+                              <div
+                                key={cit.id}
+                                className="rounded-md border border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-700 dark:bg-zinc-900"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{cit.title}</p>
+                                  <span className="text-[10px] text-zinc-400">{cit.score}% match</span>
+                                </div>
+                                <p className="mt-1 text-[11px] text-zinc-500 line-clamp-3">{cit.excerpt}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                     {aiLoading && (
@@ -338,19 +357,48 @@ export default function KnowledgeBasePage() {
                   </p>
                 )}
                 {aiMessages.map((msg, i) => (
-                  <div
-                    key={i}
-                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                  >
+                  <div key={i}>
                     <div
-                      className={`max-w-[90%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
-                        msg.role === "user"
-                          ? "bg-purple-600 text-white"
-                          : "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
-                      }`}
+                      className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                     >
-                      <Markdown>{msg.content}</Markdown>
+                      <div
+                        className={`max-w-[90%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
+                          msg.role === "user"
+                            ? "bg-purple-600 text-white"
+                            : "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
+                        }`}
+                      >
+                        <Markdown>{msg.content}</Markdown>
+                      </div>
                     </div>
+                    {msg.role === "ai" && msg.citations && msg.citations.length > 0 && (
+                      <div className="mt-1 flex justify-start">
+                        <button
+                          onClick={() => setExpandedCitations(expandedCitations === i ? null : i)}
+                          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-950"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          {msg.citations.length} source{msg.citations.length > 1 ? "s" : ""}
+                          {expandedCitations === i ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                        </button>
+                      </div>
+                    )}
+                    {msg.role === "ai" && msg.citations && msg.citations.length > 0 && expandedCitations === i && (
+                      <div className="mt-2 space-y-2">
+                        {msg.citations.map((cit) => (
+                          <div
+                            key={cit.id}
+                            className="rounded-md border border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-700 dark:bg-zinc-900"
+                          >
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{cit.title}</p>
+                              <span className="text-[10px] text-zinc-400">{cit.score}% match</span>
+                            </div>
+                            <p className="mt-1 text-[11px] text-zinc-500 line-clamp-3">{cit.excerpt}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
                 {aiLoading && (
